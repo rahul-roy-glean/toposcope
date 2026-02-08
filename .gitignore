@@ -1,0 +1,7 @@
+bin/
+.toposcope/
+coverage.*
+web/node_modules/
+web/.next/
+*.env
+.DS_Store

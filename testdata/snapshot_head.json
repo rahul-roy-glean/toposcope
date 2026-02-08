@@ -1,0 +1,176 @@
+{
+  "id": "snap-head-001",
+  "commit_sha": "def456a",
+  "branch": "",
+  "partial": false,
+  "nodes": {
+    "//app/auth:handler": {
+      "key": "//app/auth:handler",
+      "kind": "go_library",
+      "package": "//app/auth",
+      "tags": ["team:platform"],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//app/auth:middleware": {
+      "key": "//app/auth:middleware",
+      "kind": "go_library",
+      "package": "//app/auth",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//app/auth:handler_test": {
+      "key": "//app/auth:handler_test",
+      "kind": "go_test",
+      "package": "//app/auth",
+      "tags": [],
+      "visibility": ["//visibility:private"],
+      "is_test": true,
+      "is_external": false
+    },
+    "//lib/session:lib": {
+      "key": "//lib/session:lib",
+      "kind": "go_library",
+      "package": "//lib/session",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/session:internal": {
+      "key": "//lib/session:internal",
+      "kind": "go_library",
+      "package": "//lib/session",
+      "tags": [],
+      "visibility": ["//lib/session:__subpackages__"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/session:types": {
+      "key": "//lib/session:types",
+      "kind": "go_library",
+      "package": "//lib/session",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/session:store": {
+      "key": "//lib/session:store",
+      "kind": "go_library",
+      "package": "//lib/session",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/session:validate": {
+      "key": "//lib/session:validate",
+      "kind": "go_library",
+      "package": "//lib/session",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/crypto:lib": {
+      "key": "//lib/crypto:lib",
+      "kind": "go_library",
+      "package": "//lib/crypto",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//platform/api/auth:lib": {
+      "key": "//platform/api/auth:lib",
+      "kind": "go_library",
+      "package": "//platform/api/auth",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//platform/internal/auth:lib": {
+      "key": "//platform/internal/auth:lib",
+      "kind": "go_library",
+      "package": "//platform/internal/auth",
+      "tags": [],
+      "visibility": ["//platform:__subpackages__"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//proto/common:types_go": {
+      "key": "//proto/common:types_go",
+      "kind": "go_proto_library",
+      "package": "//proto/common",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//lib/config:lib": {
+      "key": "//lib/config:lib",
+      "kind": "go_library",
+      "package": "//lib/config",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//app/billing:service": {
+      "key": "//app/billing:service",
+      "kind": "go_library",
+      "package": "//app/billing",
+      "tags": [],
+      "visibility": ["//visibility:public"],
+      "is_test": false,
+      "is_external": false
+    },
+    "//app/billing:service_test": {
+      "key": "//app/billing:service_test",
+      "kind": "go_test",
+      "package": "//app/billing",
+      "tags": [],
+      "visibility": ["//visibility:private"],
+      "is_test": true,
+      "is_external": false
+    }
+  },
+  "edges": [
+    {"from": "//app/auth:handler", "to": "//lib/crypto:lib", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//proto/common:types_go", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//platform/api/auth:lib", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//lib/session:internal", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//lib/session:types", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//lib/session:store", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//lib/session:validate", "type": "COMPILE"},
+    {"from": "//app/auth:handler", "to": "//lib/config:lib", "type": "COMPILE"},
+    {"from": "//app/auth:middleware", "to": "//lib/crypto:lib", "type": "COMPILE"},
+    {"from": "//app/auth:middleware", "to": "//platform/api/auth:lib", "type": "COMPILE"},
+    {"from": "//app/auth:middleware", "to": "//lib/session:internal", "type": "COMPILE"},
+    {"from": "//app/auth:middleware", "to": "//lib/session:validate", "type": "COMPILE"},
+    {"from": "//app/auth:handler_test", "to": "//app/auth:handler", "type": "COMPILE"},
+    {"from": "//platform/api/auth:lib", "to": "//platform/internal/auth:lib", "type": "COMPILE"},
+    {"from": "//platform/api/auth:lib", "to": "//proto/common:types_go", "type": "COMPILE"},
+    {"from": "//platform/internal/auth:lib", "to": "//lib/crypto:lib", "type": "COMPILE"},
+    {"from": "//lib/session:lib", "to": "//lib/session:internal", "type": "COMPILE"},
+    {"from": "//lib/session:lib", "to": "//lib/crypto:lib", "type": "COMPILE"},
+    {"from": "//lib/session:store", "to": "//lib/session:internal", "type": "COMPILE"},
+    {"from": "//lib/session:types", "to": "//proto/common:types_go", "type": "COMPILE"},
+    {"from": "//lib/session:validate", "to": "//lib/session:types", "type": "COMPILE"},
+    {"from": "//app/billing:service", "to": "//proto/common:types_go", "type": "COMPILE"},
+    {"from": "//app/billing:service", "to": "//lib/config:lib", "type": "COMPILE"},
+    {"from": "//app/billing:service_test", "to": "//app/billing:service", "type": "COMPILE"}
+  ],
+  "stats": {
+    "node_count": 15,
+    "edge_count": 24,
+    "package_count": 8,
+    "extraction_ms": 1350
+  },
+  "extracted_at": "2025-01-15T11:00:00Z"
+}
