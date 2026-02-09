@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/toposcope/toposcope/pkg/config"
 	"github.com/toposcope/toposcope/pkg/graph"
+	"github.com/toposcope/toposcope/pkg/graphquery"
 )
 
 func newUICmd() *cobra.Command {
@@ -389,173 +390,14 @@ func (s *localAPIServer) handleSubgraph(w http.ResponseWriter, r *http.Request, 
 
 	// If no roots specified, return the full graph (capped at 500 nodes for UI performance)
 	if len(roots) == 0 {
-		sub := capGraph(snap, 500)
-		writeJSON(w, sub)
+		result := graphquery.CapGraph(snap, 500)
+		writeJSON(w, result)
 		return
 	}
 
 	// BFS from roots to given depth
-	sub := extractSubgraph(snap, roots, depth)
-	writeJSON(w, sub)
-}
-
-// findSnapshot looks up a snapshot by ID or commit SHA prefix.
-func (s *localAPIServer) findSnapshot(id string) *graph.Snapshot {
-	// Try exact SHA match first
-	path := filepath.Join(s.snapDir, id+".json")
-	if snap, err := graph.LoadSnapshot(path); err == nil {
-		return snap
-	}
-
-	// Try SHA prefix match
-	entries, err := os.ReadDir(s.snapDir)
-	if err != nil {
-		return nil
-	}
-	for _, e := range entries {
-		name := strings.TrimSuffix(e.Name(), ".json")
-		if strings.HasPrefix(name, id) {
-			if snap, err := graph.LoadSnapshot(filepath.Join(s.snapDir, e.Name())); err == nil {
-				return snap
-			}
-		}
-	}
-
-	return nil
-}
-
-// extractSubgraph does BFS from roots to depth, collecting nodes and edges.
-func extractSubgraph(snap *graph.Snapshot, roots []string, depth int) map[string]interface{} {
-	// Build adjacency maps
-	fwd := make(map[string][]graph.Edge) // outgoing
-	rev := make(map[string][]graph.Edge) // incoming
-	for _, e := range snap.Edges {
-		fwd[e.From] = append(fwd[e.From], e)
-		rev[e.To] = append(rev[e.To], e)
-	}
-
-	visited := make(map[string]bool)
-	queue := make([]string, 0, len(roots))
-
-	for _, r := range roots {
-		// Support prefix matching
-		for key := range snap.Nodes {
-			if key == r || strings.HasPrefix(key, r) {
-				if !visited[key] {
-					visited[key] = true
-					queue = append(queue, key)
-				}
-			}
-		}
-	}
-
-	// BFS both directions
-	for d := 0; d < depth && len(queue) > 0; d++ {
-		var next []string
-		for _, node := range queue {
-			for _, e := range fwd[node] {
-				if !visited[e.To] {
-					visited[e.To] = true
-					next = append(next, e.To)
-				}
-			}
-			for _, e := range rev[node] {
-				if !visited[e.From] {
-					visited[e.From] = true
-					next = append(next, e.From)
-				}
-			}
-		}
-		queue = next
-	}
-
-	// Collect nodes and edges within the visited set
-	nodes := make(map[string]*graph.Node)
-	var edges []graph.Edge
-
-	for key := range visited {
-		if n, ok := snap.Nodes[key]; ok {
-			nodes[key] = n
-		}
-	}
-	for _, e := range snap.Edges {
-		if visited[e.From] && visited[e.To] {
-			edges = append(edges, e)
-		}
-	}
-
-	return map[string]interface{}{
-		"nodes": nodes,
-		"edges": edges,
-	}
-}
-
-// capGraph returns a subset of the graph with at most maxNodes nodes,
-// preferring high-degree nodes (most connected = most interesting).
-func capGraph(snap *graph.Snapshot, maxNodes int) map[string]interface{} {
-	if len(snap.Nodes) <= maxNodes {
-		return map[string]interface{}{
-			"nodes": snap.Nodes,
-			"edges": snap.Edges,
-		}
-	}
-
-	// Rank nodes by total degree
-	degree := make(map[string]int)
-	for _, e := range snap.Edges {
-		degree[e.From]++
-		degree[e.To]++
-	}
-
-	type ranked struct {
-		key string
-		deg int
-	}
-	var rankedNodes []ranked
-	for key := range snap.Nodes {
-		rankedNodes = append(rankedNodes, ranked{key, degree[key]})
-	}
-	sort.Slice(rankedNodes, func(i, j int) bool {
-		return rankedNodes[i].deg > rankedNodes[j].deg
-	})
-
-	keep := make(map[string]bool)
-	for i := 0; i < maxNodes && i < len(rankedNodes); i++ {
-		keep[rankedNodes[i].key] = true
-	}
-
-	nodes := make(map[string]*graph.Node)
-	for key := range keep {
-		nodes[key] = snap.Nodes[key]
-	}
-
-	var edges []graph.Edge
-	for _, e := range snap.Edges {
-		if keep[e.From] && keep[e.To] {
-			edges = append(edges, e)
-		}
-	}
-
-	return map[string]interface{}{
-		"nodes": nodes,
-		"edges": edges,
-	}
-}
-
-// PackageNode represents an aggregated package in the package-level graph.
-type PackageNode struct {
-	Package     string   `json:"package"`
-	TargetCount int      `json:"target_count"`
-	Kinds       []string `json:"kinds"`
-	HasTests    bool     `json:"has_tests"`
-	IsExternal  bool     `json:"is_external"`
-}
-
-// PackageEdge represents an aggregated edge between packages.
-type PackageEdge struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Weight int    `json:"weight"`
+	result := graphquery.ExtractSubgraph(snap, roots, depth)
+	writeJSON(w, result)
 }
 
 func (s *localAPIServer) handlePackages(w http.ResponseWriter, r *http.Request, snapshotID string) {
@@ -574,132 +416,8 @@ func (s *localAPIServer) handlePackages(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	// Aggregate targets into packages
-	pkgNodes := make(map[string]*PackageNode)
-	for _, node := range snap.Nodes {
-		if hideTests && node.IsTest {
-			continue
-		}
-		if hideExternal && node.IsExternal {
-			continue
-		}
-		pkg := node.Package
-		if pkg == "" {
-			continue
-		}
-		pn, ok := pkgNodes[pkg]
-		if !ok {
-			pn = &PackageNode{
-				Package:    pkg,
-				IsExternal: node.IsExternal,
-			}
-			pkgNodes[pkg] = pn
-		}
-		pn.TargetCount++
-		if node.IsTest {
-			pn.HasTests = true
-		}
-		// Track unique kinds
-		found := false
-		for _, k := range pn.Kinds {
-			if k == node.Kind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			pn.Kinds = append(pn.Kinds, node.Kind)
-		}
-	}
-
-	// Build set of included target keys for edge filtering
-	includedTargets := make(map[string]bool)
-	for _, node := range snap.Nodes {
-		if hideTests && node.IsTest {
-			continue
-		}
-		if hideExternal && node.IsExternal {
-			continue
-		}
-		if node.Package != "" && pkgNodes[node.Package] != nil {
-			includedTargets[node.Key] = true
-		}
-	}
-
-	// Aggregate edges between packages
-	edgeWeight := make(map[string]int) // "fromPkg|toPkg" -> count
-	for _, e := range snap.Edges {
-		if !includedTargets[e.From] || !includedTargets[e.To] {
-			continue
-		}
-		fromNode := snap.Nodes[e.From]
-		toNode := snap.Nodes[e.To]
-		if fromNode == nil || toNode == nil {
-			continue
-		}
-		fromPkg := fromNode.Package
-		toPkg := toNode.Package
-		if fromPkg == toPkg || fromPkg == "" || toPkg == "" {
-			continue
-		}
-		edgeWeight[fromPkg+"|"+toPkg]++
-	}
-
-	pkgEdges := make([]PackageEdge, 0)
-	for key, weight := range edgeWeight {
-		if weight < minEdgeWeight {
-			continue
-		}
-		parts := strings.SplitN(key, "|", 2)
-		pkgEdges = append(pkgEdges, PackageEdge{
-			From:   parts[0],
-			To:     parts[1],
-			Weight: weight,
-		})
-	}
-
-	// Cap to top 500 packages by degree if too many
-	maxPkgs := 500
-	if len(pkgNodes) > maxPkgs {
-		pkgDegree := make(map[string]int)
-		for _, e := range pkgEdges {
-			pkgDegree[e.From]++
-			pkgDegree[e.To]++
-		}
-		type rankedPkg struct {
-			pkg string
-			deg int
-		}
-		var ranked []rankedPkg
-		for pkg := range pkgNodes {
-			ranked = append(ranked, rankedPkg{pkg, pkgDegree[pkg]})
-		}
-		sort.Slice(ranked, func(i, j int) bool {
-			return ranked[i].deg > ranked[j].deg
-		})
-		keep := make(map[string]bool)
-		for i := 0; i < maxPkgs && i < len(ranked); i++ {
-			keep[ranked[i].pkg] = true
-		}
-		for pkg := range pkgNodes {
-			if !keep[pkg] {
-				delete(pkgNodes, pkg)
-			}
-		}
-		filteredEdges := make([]PackageEdge, 0)
-		for _, e := range pkgEdges {
-			if keep[e.From] && keep[e.To] {
-				filteredEdges = append(filteredEdges, e)
-			}
-		}
-		pkgEdges = filteredEdges
-	}
-
-	writeJSON(w, map[string]interface{}{
-		"nodes":     pkgNodes,
-		"edges":     pkgEdges,
-		"truncated": len(snap.Packages()) > len(pkgNodes),
-	})
+	result := graphquery.AggregatePackages(snap, hideTests, hideExternal, minEdgeWeight, 0)
+	writeJSON(w, result)
 }
 
 func (s *localAPIServer) handleEgo(w http.ResponseWriter, r *http.Request, snapshotID string) {
@@ -727,99 +445,8 @@ func (s *localAPIServer) handleEgo(w http.ResponseWriter, r *http.Request, snaps
 		direction = "both"
 	}
 
-	// Build adjacency maps
-	fwd := make(map[string][]graph.Edge)
-	rev := make(map[string][]graph.Edge)
-	for _, e := range snap.Edges {
-		fwd[e.From] = append(fwd[e.From], e)
-		rev[e.To] = append(rev[e.To], e)
-	}
-
-	// Find matching root nodes (exact or prefix match)
-	visited := make(map[string]bool)
-	var queue []string
-	for key := range snap.Nodes {
-		if key == target || strings.HasPrefix(key, target+":") || strings.HasPrefix(key, target+"/") {
-			if !visited[key] {
-				visited[key] = true
-				queue = append(queue, key)
-			}
-		}
-	}
-
-	// Also match as package
-	if len(queue) == 0 {
-		for key, node := range snap.Nodes {
-			if node.Package == target {
-				if !visited[key] {
-					visited[key] = true
-					queue = append(queue, key)
-				}
-			}
-		}
-	}
-
-	if len(queue) == 0 {
-		writeJSON(w, map[string]interface{}{
-			"nodes":     map[string]*graph.Node{},
-			"edges":     []graph.Edge{},
-			"truncated": false,
-		})
-		return
-	}
-
-	maxNodes := 500
-	truncated := false
-
-	// BFS with direction control
-	for d := 0; d < depth && len(queue) > 0; d++ {
-		var next []string
-		for _, node := range queue {
-			if direction == "deps" || direction == "both" {
-				for _, e := range fwd[node] {
-					if !visited[e.To] {
-						visited[e.To] = true
-						next = append(next, e.To)
-					}
-				}
-			}
-			if direction == "rdeps" || direction == "both" {
-				for _, e := range rev[node] {
-					if !visited[e.From] {
-						visited[e.From] = true
-						next = append(next, e.From)
-					}
-				}
-			}
-		}
-		queue = next
-
-		if len(visited) >= maxNodes {
-			truncated = true
-			break
-		}
-	}
-
-	// Collect nodes and edges
-	nodes := make(map[string]*graph.Node)
-	for key := range visited {
-		if n, ok := snap.Nodes[key]; ok {
-			nodes[key] = n
-		}
-	}
-
-	var edges []graph.Edge
-	for _, e := range snap.Edges {
-		if visited[e.From] && visited[e.To] {
-			edges = append(edges, e)
-		}
-	}
-
-	writeJSON(w, map[string]interface{}{
-		"nodes":     nodes,
-		"edges":     edges,
-		"truncated": truncated,
-	})
+	result := graphquery.EgoGraph(snap, target, depth, direction, 0)
+	writeJSON(w, result)
 }
 
 func (s *localAPIServer) handlePath(w http.ResponseWriter, r *http.Request, snapshotID string) {
@@ -843,183 +470,33 @@ func (s *localAPIServer) handlePath(w http.ResponseWriter, r *http.Request, snap
 		}
 	}
 
-	// Build forward adjacency map
-	fwd := make(map[string][]string)
-	for _, e := range snap.Edges {
-		fwd[e.From] = append(fwd[e.From], e.To)
+	result := graphquery.FindPaths(snap, fromQ, toQ, maxPaths)
+	writeJSON(w, result)
+}
+
+// findSnapshot looks up a snapshot by ID or commit SHA prefix.
+func (s *localAPIServer) findSnapshot(id string) *graph.Snapshot {
+	// Try exact SHA match first
+	path := filepath.Join(s.snapDir, id+".json")
+	if snap, err := graph.LoadSnapshot(path); err == nil {
+		return snap
 	}
 
-	// Resolve "from" nodes (exact, prefix, or package match)
-	resolveNodes := func(query string) []string {
-		var matches []string
-		for key := range snap.Nodes {
-			if key == query || strings.HasPrefix(key, query+":") || strings.HasPrefix(key, query+"/") {
-				matches = append(matches, key)
-			}
-		}
-		if len(matches) == 0 {
-			for key, node := range snap.Nodes {
-				if node.Package == query {
-					matches = append(matches, key)
-				}
-			}
-		}
-		return matches
+	// Try SHA prefix match
+	entries, err := os.ReadDir(s.snapDir)
+	if err != nil {
+		return nil
 	}
-
-	fromNodes := resolveNodes(fromQ)
-	toNodes := resolveNodes(toQ)
-
-	if len(fromNodes) == 0 || len(toNodes) == 0 {
-		writeJSON(w, map[string]interface{}{
-			"paths":       [][]string{},
-			"nodes":       map[string]*graph.Node{},
-			"edges":       []graph.Edge{},
-			"from":        fromQ,
-			"to":          toQ,
-			"path_length": 0,
-		})
-		return
-	}
-
-	toSet := make(map[string]bool)
-	for _, n := range toNodes {
-		toSet[n] = true
-	}
-
-	// BFS from fromNodes, tracking parents for shortest-path reconstruction
-	type bfsEntry struct {
-		node  string
-		depth int
-	}
-	parents := make(map[string][]string) // node -> list of parent nodes at shortest distance
-	dist := make(map[string]int)         // node -> BFS depth
-
-	var queue []bfsEntry
-	for _, n := range fromNodes {
-		dist[n] = 0
-		queue = append(queue, bfsEntry{n, 0})
-	}
-
-	foundDepth := -1
-
-	for len(queue) > 0 {
-		curr := queue[0]
-		queue = queue[1:]
-
-		// If we've already found target nodes and we're past that depth, stop
-		if foundDepth >= 0 && curr.depth > foundDepth {
-			break
-		}
-
-		if toSet[curr.node] {
-			foundDepth = curr.depth
-		}
-
-		for _, neighbor := range fwd[curr.node] {
-			nextDepth := curr.depth + 1
-			if _, seen := dist[neighbor]; !seen {
-				dist[neighbor] = nextDepth
-				parents[neighbor] = []string{curr.node}
-				queue = append(queue, bfsEntry{neighbor, nextDepth})
-			} else if dist[neighbor] == nextDepth {
-				// Same shortest distance — add as additional parent
-				parents[neighbor] = append(parents[neighbor], curr.node)
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".json")
+		if strings.HasPrefix(name, id) {
+			if snap, err := graph.LoadSnapshot(filepath.Join(s.snapDir, e.Name())); err == nil {
+				return snap
 			}
 		}
 	}
 
-	// Find which target nodes were reached
-	var reachedTargets []string
-	for _, n := range toNodes {
-		if _, ok := dist[n]; ok {
-			reachedTargets = append(reachedTargets, n)
-		}
-	}
-
-	if len(reachedTargets) == 0 {
-		writeJSON(w, map[string]interface{}{
-			"paths":       [][]string{},
-			"nodes":       map[string]*graph.Node{},
-			"edges":       []graph.Edge{},
-			"from":        fromQ,
-			"to":          toQ,
-			"path_length": 0,
-		})
-		return
-	}
-
-	// Backtrack from reached targets through parents to enumerate all shortest paths
-	fromSet := make(map[string]bool)
-	for _, n := range fromNodes {
-		fromSet[n] = true
-	}
-
-	var allPaths [][]string
-	var backtrack func(node string, path []string)
-	backtrack = func(node string, path []string) {
-		if len(allPaths) >= maxPaths {
-			return
-		}
-		current := make([]string, len(path)+1)
-		current[0] = node
-		copy(current[1:], path)
-
-		if fromSet[node] {
-			allPaths = append(allPaths, current)
-			return
-		}
-		for _, p := range parents[node] {
-			backtrack(p, current)
-		}
-	}
-
-	for _, target := range reachedTargets {
-		if len(allPaths) >= maxPaths {
-			break
-		}
-		backtrack(target, nil)
-	}
-
-	// Collect all nodes and edges on the paths
-	pathNodes := make(map[string]bool)
-	pathEdgeSet := make(map[string]bool)
-	for _, p := range allPaths {
-		for _, n := range p {
-			pathNodes[n] = true
-		}
-		for i := 0; i < len(p)-1; i++ {
-			pathEdgeSet[p[i]+"->"+p[i+1]] = true
-		}
-	}
-
-	resultNodes := make(map[string]*graph.Node)
-	for key := range pathNodes {
-		if n, ok := snap.Nodes[key]; ok {
-			resultNodes[key] = n
-		}
-	}
-
-	var resultEdges []graph.Edge
-	for _, e := range snap.Edges {
-		if pathEdgeSet[e.From+"->"+e.To] {
-			resultEdges = append(resultEdges, e)
-		}
-	}
-
-	pathLength := 0
-	if len(allPaths) > 0 {
-		pathLength = len(allPaths[0]) - 1
-	}
-
-	writeJSON(w, map[string]interface{}{
-		"paths":       allPaths,
-		"nodes":       resultNodes,
-		"edges":       resultEdges,
-		"from":        fromQ,
-		"to":          toQ,
-		"path_length": pathLength,
-	})
+	return nil
 }
 
 // detectDefaultBranch uses git to find the default branch name.

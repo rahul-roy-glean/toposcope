@@ -5,7 +5,9 @@ package tenant
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -120,4 +122,205 @@ func (s *Service) ListRepositories(ctx context.Context, tenantID string) ([]Repo
 		repos = append(repos, r)
 	}
 	return repos, rows.Err()
+}
+
+// ScoreRow represents a score record from the database.
+type ScoreRow struct {
+	ID               string
+	TenantID         string
+	RepoID           string
+	PRNumber         *int
+	CommitSHA        string
+	BaseSnapshotID   string
+	HeadSnapshotID   string
+	DeltaID          string
+	TotalScore       float64
+	Grade            string
+	Breakdown        json.RawMessage
+	Hotspots         json.RawMessage
+	SuggestedActions json.RawMessage
+	CreatedAt        time.Time
+}
+
+// SnapshotRow represents snapshot metadata from the database.
+type SnapshotRow struct {
+	ID           string
+	TenantID     string
+	RepoID       string
+	CommitSHA    string
+	Branch       *string
+	NodeCount    int
+	EdgeCount    int
+	PackageCount int
+	ExtractionMs int
+	StorageRef   string
+	CreatedAt    time.Time
+}
+
+// GetTenantByName looks up a tenant by display name (for non-installation tenants).
+func (s *Service) GetTenantByName(ctx context.Context, name string) (*Tenant, error) {
+	t := &Tenant{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, display_name, github_installation_id, credentials_ref, created_at
+		 FROM tenants WHERE display_name = $1`,
+		name,
+	).Scan(&t.ID, &t.DisplayName, &t.GitHubInstallationID, &t.CredentialsRef, &t.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get tenant by name %s: %w", name, err)
+	}
+	return t, nil
+}
+
+// CreateTenantByName creates a tenant without an installation ID (for CI-based ingest).
+func (s *Service) CreateTenantByName(ctx context.Context, name string) (*Tenant, error) {
+	t := &Tenant{}
+	err := s.db.QueryRowContext(ctx,
+		`INSERT INTO tenants (display_name)
+		 VALUES ($1)
+		 RETURNING id, display_name, github_installation_id, credentials_ref, created_at`,
+		name,
+	).Scan(&t.ID, &t.DisplayName, &t.GitHubInstallationID, &t.CredentialsRef, &t.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create tenant by name: %w", err)
+	}
+	return t, nil
+}
+
+// EnsureTenantAndRepo gets or creates a tenant (by org name) and repository.
+// Returns tenantID, repoID, and any error.
+func (s *Service) EnsureTenantAndRepo(ctx context.Context, orgName, repoFullName, defaultBranch string) (string, string, error) {
+	// Get or create tenant
+	t, err := s.GetTenantByName(ctx, orgName)
+	if err != nil {
+		t, err = s.CreateTenantByName(ctx, orgName)
+		if err != nil {
+			// Could be a race condition; try getting again
+			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+				t, err = s.GetTenantByName(ctx, orgName)
+				if err != nil {
+					return "", "", fmt.Errorf("ensure tenant: %w", err)
+				}
+			} else {
+				return "", "", fmt.Errorf("ensure tenant: %w", err)
+			}
+		}
+	}
+
+	// Get or create repository
+	repo, err := s.UpsertRepository(ctx, t.ID, repoFullName, nil, defaultBranch)
+	if err != nil {
+		return "", "", fmt.Errorf("ensure repository: %w", err)
+	}
+
+	return t.ID, repo.ID, nil
+}
+
+// ListAllRepos returns all repositories across all tenants.
+func (s *Service) ListAllRepos(ctx context.Context) ([]Repository, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, tenant_id, github_repo_id, full_name, default_branch, created_at
+		 FROM repositories ORDER BY full_name`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list all repositories: %w", err)
+	}
+	defer rows.Close()
+
+	var repos []Repository
+	for rows.Next() {
+		var r Repository
+		if err := rows.Scan(&r.ID, &r.TenantID, &r.GitHubRepoID, &r.FullName, &r.DefaultBranch, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan repository: %w", err)
+		}
+		repos = append(repos, r)
+	}
+	return repos, rows.Err()
+}
+
+// ListScoresByRepo returns all scores for a repository, newest first.
+func (s *Service) ListScoresByRepo(ctx context.Context, repoID string) ([]ScoreRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
+		        base_snapshot_id, head_snapshot_id, delta_id,
+		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
+		 FROM scores WHERE repo_id = $1 ORDER BY created_at DESC`,
+		repoID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list scores: %w", err)
+	}
+	defer rows.Close()
+
+	var scores []ScoreRow
+	for rows.Next() {
+		var sc ScoreRow
+		if err := rows.Scan(
+			&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
+			&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
+			&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan score: %w", err)
+		}
+		scores = append(scores, sc)
+	}
+	return scores, rows.Err()
+}
+
+// GetScoreByID returns a single score by ID.
+func (s *Service) GetScoreByID(ctx context.Context, scoreID string) (*ScoreRow, error) {
+	sc := &ScoreRow{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
+		        base_snapshot_id, head_snapshot_id, delta_id,
+		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
+		 FROM scores WHERE id = $1`,
+		scoreID,
+	).Scan(
+		&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
+		&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
+		&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get score %s: %w", scoreID, err)
+	}
+	return sc, nil
+}
+
+// GetScoreByPR returns the most recent score for a PR.
+func (s *Service) GetScoreByPR(ctx context.Context, repoID string, prNumber int) (*ScoreRow, error) {
+	sc := &ScoreRow{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
+		        base_snapshot_id, head_snapshot_id, delta_id,
+		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
+		 FROM scores WHERE repo_id = $1 AND pr_number = $2
+		 ORDER BY created_at DESC LIMIT 1`,
+		repoID, prNumber,
+	).Scan(
+		&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
+		&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
+		&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get score for PR %d: %w", prNumber, err)
+	}
+	return sc, nil
+}
+
+// GetSnapshotByID returns snapshot metadata by ID.
+func (s *Service) GetSnapshotByID(ctx context.Context, snapshotID string) (*SnapshotRow, error) {
+	sn := &SnapshotRow{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, tenant_id, repo_id, commit_sha, branch,
+		        node_count, edge_count, package_count, extraction_ms, storage_ref, created_at
+		 FROM snapshots WHERE id = $1`,
+		snapshotID,
+	).Scan(
+		&sn.ID, &sn.TenantID, &sn.RepoID, &sn.CommitSHA, &sn.Branch,
+		&sn.NodeCount, &sn.EdgeCount, &sn.PackageCount, &sn.ExtractionMs, &sn.StorageRef, &sn.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get snapshot %s: %w", snapshotID, err)
+	}
+	return sn, nil
 }

@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_tenants_display_name_no_installation;

@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	_ "github.com/lib/pq"
 
+	"github.com/toposcope/toposcope/internal/api"
 	"github.com/toposcope/toposcope/internal/ingestion"
 	"github.com/toposcope/toposcope/internal/tenant"
 	"github.com/toposcope/toposcope/internal/webhook"
@@ -27,9 +30,18 @@ type config struct {
 	WebhookSecret string
 	GitHubAppID   string
 	GitHubKey     string
+	APIKey        string
+	CacheSize     int
 }
 
 func loadConfig() config {
+	cacheSize := 20
+	if v := os.Getenv("SNAPSHOT_CACHE_SIZE"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			cacheSize = parsed
+		}
+	}
+
 	return config{
 		Port:          envOrDefault("PORT", "8080"),
 		DatabaseURL:   envOrDefault("DATABASE_URL", "postgres://localhost:5432/toposcope?sslmode=disable"),
@@ -37,6 +49,8 @@ func loadConfig() config {
 		WebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
 		GitHubAppID:   os.Getenv("GITHUB_APP_ID"),
 		GitHubKey:     os.Getenv("GITHUB_PRIVATE_KEY"),
+		APIKey:        os.Getenv("API_KEY"),
+		CacheSize:     cacheSize,
 	}
 }
 
@@ -64,15 +78,32 @@ func main() {
 
 	webhookHandler := webhook.NewHandler([]byte(cfg.WebhookSecret), tenantSvc, ingestionSvc)
 
+	// Initialize API handler
+	cache := api.NewSnapshotCache(cfg.CacheSize)
+	apiHandler := api.NewHandler(db, tenantSvc, ingestionSvc, cache)
+
 	// Set up HTTP routes
 	mux := http.NewServeMux()
 	mux.Handle("POST /v1/webhooks/github", webhookHandler)
 	mux.HandleFunc("POST /internal/process", processHandler(ingestionSvc))
 	mux.HandleFunc("GET /healthz", healthHandler(db))
 
+	// Register API routes
+	apiHandler.RegisterRoutes(mux)
+
+	// Apply CORS middleware globally, API key auth selectively to /api/ routes
+	authMiddleware := api.APIKeyAuth(cfg.APIKey)
+	handler := api.CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			authMiddleware(mux).ServeHTTP(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
+
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: mux,
+		Handler: handler,
 	}
 
 	// Graceful shutdown

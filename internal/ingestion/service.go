@@ -59,6 +59,11 @@ func NewService(db *sql.DB, tenants *tenant.Service, storage StorageClient, extr
 	}
 }
 
+// Storage returns the underlying StorageClient.
+func (s *Service) Storage() StorageClient {
+	return s.storage
+}
+
 // CreateIngestion creates a new ingestion record and returns its ID.
 // The idempotency key is repo_id + commit_sha (+ pr_number if present).
 func (s *Service) CreateIngestion(ctx context.Context, req IngestionRequest) (string, error) {
@@ -140,7 +145,7 @@ func (s *Service) ProcessPR(ctx context.Context, req IngestionRequest) error {
 		return fmt.Errorf("marshal head snapshot: %w", err)
 	}
 
-	headSnapshotID, err := s.storeSnapshot(ctx, req, headSnapshot, headSnapshotData)
+	headSnapshotID, err := s.StoreSnapshot(ctx, req, headSnapshot, headSnapshotData)
 	if err != nil {
 		return fmt.Errorf("store head snapshot: %w", err)
 	}
@@ -165,7 +170,7 @@ func (s *Service) ProcessPR(ctx context.Context, req IngestionRequest) error {
 		return fmt.Errorf("marshal delta: %w", err)
 	}
 
-	deltaID, err := s.storeDelta(ctx, req, delta, deltaData)
+	deltaID, err := s.StoreDelta(ctx, req, delta, deltaData)
 	if err != nil {
 		return fmt.Errorf("store delta: %w", err)
 	}
@@ -182,7 +187,7 @@ func (s *Service) ProcessPR(ctx context.Context, req IngestionRequest) error {
 	// 6. Store score
 	var scoreID string
 	if scoreResult != nil {
-		scoreID, err = s.storeScore(ctx, req, baseSnapshotID, headSnapshotID, deltaID, scoreResult)
+		scoreID, err = s.StoreScore(ctx, req, baseSnapshotID, headSnapshotID, deltaID, scoreResult)
 		if err != nil {
 			return fmt.Errorf("store score: %w", err)
 		}
@@ -231,7 +236,7 @@ func (s *Service) ensureBaseline(ctx context.Context, req IngestionRequest) (str
 	}
 
 	baseSnapshot.Branch = req.BaseBranch
-	id, err := s.storeSnapshot(ctx, req, baseSnapshot, data)
+	id, err := s.StoreSnapshot(ctx, req, baseSnapshot, data)
 	if err != nil {
 		return "", fmt.Errorf("store baseline snapshot: %w", err)
 	}
@@ -249,7 +254,8 @@ func (s *Service) ensureBaseline(ctx context.Context, req IngestionRequest) (str
 	return id, nil
 }
 
-func (s *Service) storeSnapshot(ctx context.Context, req IngestionRequest, snap *graph.Snapshot, data []byte) (string, error) {
+// StoreSnapshot stores a snapshot blob and metadata to storage and database.
+func (s *Service) StoreSnapshot(ctx context.Context, req IngestionRequest, snap *graph.Snapshot, data []byte) (string, error) {
 	storageRef := fmt.Sprintf("snapshots/%s/%s.json", req.TenantID, snap.ID)
 	if err := s.storage.PutSnapshot(ctx, req.TenantID, snap.ID, data); err != nil {
 		return "", fmt.Errorf("put snapshot blob: %w", err)
@@ -271,7 +277,8 @@ func (s *Service) storeSnapshot(ctx context.Context, req IngestionRequest, snap 
 	return id, nil
 }
 
-func (s *Service) storeDelta(ctx context.Context, req IngestionRequest, delta *graph.Delta, data []byte) (string, error) {
+// StoreDelta stores a delta blob and metadata to storage and database.
+func (s *Service) StoreDelta(ctx context.Context, req IngestionRequest, delta *graph.Delta, data []byte) (string, error) {
 	storageRef := fmt.Sprintf("deltas/%s/%s.json", req.TenantID, delta.ID)
 	if err := s.storage.PutDelta(ctx, req.TenantID, delta.ID, data); err != nil {
 		return "", fmt.Errorf("put delta blob: %w", err)
@@ -294,7 +301,8 @@ func (s *Service) storeDelta(ctx context.Context, req IngestionRequest, delta *g
 	return id, nil
 }
 
-func (s *Service) storeScore(ctx context.Context, req IngestionRequest, baseSnapshotID, headSnapshotID, deltaID string, result *scoring.ScoreResult) (string, error) {
+// StoreScore stores a scoring result to the database.
+func (s *Service) StoreScore(ctx context.Context, req IngestionRequest, baseSnapshotID, headSnapshotID, deltaID string, result *scoring.ScoreResult) (string, error) {
 	breakdownJSON, err := json.Marshal(result.Breakdown)
 	if err != nil {
 		return "", fmt.Errorf("marshal breakdown: %w", err)
