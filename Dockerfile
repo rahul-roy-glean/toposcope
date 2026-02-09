@@ -33,6 +33,6 @@ RUN apk add --no-cache ca-certificates git
 COPY --from=builder /out/toposcope  /usr/local/bin/toposcope
 COPY --from=builder /out/toposcoped /usr/local/bin/toposcoped
 
-EXPOSE 7700
+EXPOSE 8080
 
-ENTRYPOINT ["toposcope"]
+ENTRYPOINT ["toposcoped"]
