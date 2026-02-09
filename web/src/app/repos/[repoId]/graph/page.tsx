@@ -61,14 +61,13 @@ export default function GraphExplorerPage() {
   const [selectedEgoNode, setSelectedEgoNode] = useState<string | null>(null);
   const [egoLoading, setEgoLoading] = useState(false);
 
-  // Hotspots state
-  const [hotspots, setHotspots] = useState<{ pkg: string; degree: number; inDegree: number; targetCount: number }[]>([]);
+  // Hotspots (derived from package data)
 
   // Path Finder state
   const [pathFromSearch, setPathFromSearch] = useState("");
   const [pathToSearch, setPathToSearch] = useState("");
   const [pathFrom, setPathFrom] = useState<string | null>(null);
-  const [pathTo, setPathTo] = useState<string | null>(null);
+  const [, setPathTo] = useState<string | null>(null);
   const [pathResult, setPathResult] = useState<PathResult | null>(null);
   const [pathLoading, setPathLoading] = useState(false);
   const [selectedPathNode, setSelectedPathNode] = useState<string | null>(null);
@@ -145,7 +144,7 @@ export default function GraphExplorerPage() {
   }, [snapshotId, hideTests, hideExternal, minEdgeWeight]);
 
   // Compute hotspots from package data
-  useEffect(() => {
+  const hotspots = useMemo(() => {
     const degreeMap: Record<string, { total: number; inDeg: number }> = {};
     for (const e of pkgEdges) {
       const w = e.weight ?? 1;
@@ -157,7 +156,7 @@ export default function GraphExplorerPage() {
       degreeMap[e.to].inDeg += w;
     }
 
-    const ranked = Object.entries(pkgNodes)
+    return Object.entries(pkgNodes)
       .map(([pkg, node]) => {
         const deg = degreeMap[pkg];
         return {
@@ -168,8 +167,6 @@ export default function GraphExplorerPage() {
         };
       })
       .sort((a, b) => b.inDegree - a.inDegree);
-
-    setHotspots(ranked);
   }, [pkgNodes, pkgEdges]);
 
   // Drill into a package (fetch its targets)
@@ -189,7 +186,7 @@ export default function GraphExplorerPage() {
   }, [snapshotId]);
 
   // Fetch ego graph
-  const fetchEgoGraph = useCallback(async (target: string) => {
+  const fetchEgoGraph = useCallback(async (target: string, depth: number, direction: "deps" | "rdeps" | "both") => {
     if (!snapshotId) return;
     setEgoLoading(true);
     setEgoTarget(target);
@@ -197,8 +194,8 @@ export default function GraphExplorerPage() {
     try {
       const params = new URLSearchParams({
         target,
-        depth: String(egoDepth),
-        direction: egoDirection,
+        depth: String(depth),
+        direction,
       });
       const data = await fetchJSON<{ nodes: Record<string, Node>; edges: Edge[]; truncated: boolean }>(
         `/api/snapshots/${snapshotId}/ego?${params}`
@@ -211,14 +208,7 @@ export default function GraphExplorerPage() {
       setEgoEdges([]);
     }
     setEgoLoading(false);
-  }, [snapshotId, egoDepth, egoDirection]);
-
-  // Refetch ego graph when depth/direction changes (if target is set)
-  useEffect(() => {
-    if (egoTarget) {
-      fetchEgoGraph(egoTarget);
-    }
-  }, [egoDepth, egoDirection]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [snapshotId]);
 
   // All target keys for search autocomplete (from package nodes -> build label patterns)
   const egoSearchResults = useMemo(() => {
@@ -469,7 +459,7 @@ export default function GraphExplorerPage() {
                 onChange={(e) => setEgoSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && egoSearch) {
-                    fetchEgoGraph(egoSearch);
+                    fetchEgoGraph(egoSearch, egoDepth, egoDirection);
                     setEgoSearch("");
                   }
                 }}
@@ -481,7 +471,7 @@ export default function GraphExplorerPage() {
                     <button
                       key={key}
                       onClick={() => {
-                        fetchEgoGraph(key);
+                        fetchEgoGraph(key, egoDepth, egoDirection);
                         setEgoSearch("");
                       }}
                       className="block w-full px-3 py-2 text-left font-mono text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800"
@@ -500,7 +490,11 @@ export default function GraphExplorerPage() {
                 min={1}
                 max={5}
                 value={egoDepth}
-                onChange={(e) => setEgoDepth(Number(e.target.value))}
+                onChange={(e) => {
+                  const newDepth = Number(e.target.value);
+                  setEgoDepth(newDepth);
+                  if (egoTarget) fetchEgoGraph(egoTarget, newDepth, egoDirection);
+                }}
                 className="w-20"
               />
               <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{egoDepth}</span>
@@ -510,7 +504,10 @@ export default function GraphExplorerPage() {
               {(["deps", "both", "rdeps"] as const).map((dir) => (
                 <button
                   key={dir}
-                  onClick={() => setEgoDirection(dir)}
+                  onClick={() => {
+                    setEgoDirection(dir);
+                    if (egoTarget) fetchEgoGraph(egoTarget, egoDepth, dir);
+                  }}
                   className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                     egoDirection === dir
                       ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
@@ -610,7 +607,7 @@ export default function GraphExplorerPage() {
                         onClick={() => {
                           setTab("explorer");
                           setEgoSearch("");
-                          fetchEgoGraph(h.pkg);
+                          fetchEgoGraph(h.pkg, egoDepth, egoDirection);
                         }}
                         className="cursor-pointer border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-900"
                       >

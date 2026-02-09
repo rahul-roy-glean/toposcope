@@ -148,8 +148,7 @@ func (r *Runner) buildGenerateHashesArgs(commitSHA, outputFile string) []string 
 		args = append(args, "--useCquery")
 	}
 
-	// Output path is a positional argument (not -o)
-	args = append(args, outputFile)
+	args = append(args, "-o", outputFile)
 
 	return args
 }

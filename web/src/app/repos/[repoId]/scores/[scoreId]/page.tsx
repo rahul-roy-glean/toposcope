@@ -51,6 +51,21 @@ export default function ScoreDetailPage() {
           } catch {
             // Snapshot may not be available
           }
+
+          // Auto-load impact for first hotspot
+          const firstTarget = s.hotspots[0].node_key;
+          setImpactTarget(firstTarget);
+          setImpactLoading(true);
+          try {
+            const impact = await api.getEgoGraph(s.head_commit, firstTarget, { depth: 2, direction: "both" });
+            setImpactNodes(impact.nodes || {});
+            setImpactEdges(impact.edges || []);
+            setImpactTruncated(impact.truncated || false);
+          } catch {
+            setImpactNodes({});
+            setImpactEdges([]);
+          }
+          setImpactLoading(false);
         }
       } catch {
         setError("Failed to load score result");
@@ -78,14 +93,15 @@ export default function ScoreDetailPage() {
   }, [score]);
 
   // Fetch transitive impact ego graph for a hotspot
+  const headCommit = score?.head_commit;
   const fetchImpact = useCallback(async (target: string, depth: number, direction: "deps" | "rdeps" | "both") => {
-    if (!score?.head_commit) return;
+    if (!headCommit) return;
     setImpactLoading(true);
     setImpactTarget(target);
     setSelectedImpactNode(null);
     try {
       const api = await getAPI();
-      const data = await api.getEgoGraph(score.head_commit, target, { depth, direction });
+      const data = await api.getEgoGraph(headCommit, target, { depth, direction });
       setImpactNodes(data.nodes || {});
       setImpactEdges(data.edges || []);
       setImpactTruncated(data.truncated || false);
@@ -94,21 +110,7 @@ export default function ScoreDetailPage() {
       setImpactEdges([]);
     }
     setImpactLoading(false);
-  }, [score?.head_commit]);
-
-  // Refetch when depth/direction changes
-  useEffect(() => {
-    if (impactTarget) {
-      fetchImpact(impactTarget, impactDepth, impactDirection);
-    }
-  }, [impactDepth, impactDirection]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-load impact for first hotspot on mount
-  useEffect(() => {
-    if (score?.hotspots?.length && score.head_commit && !impactTarget) {
-      fetchImpact(score.hotspots[0].node_key, impactDepth, impactDirection);
-    }
-  }, [score]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [headCommit]);
 
   if (loading) {
     return (
@@ -317,7 +319,10 @@ export default function ScoreDetailPage() {
                   {(["deps", "both", "rdeps"] as const).map((dir) => (
                     <button
                       key={dir}
-                      onClick={() => setImpactDirection(dir)}
+                      onClick={() => {
+                        setImpactDirection(dir);
+                        if (impactTarget) fetchImpact(impactTarget, impactDepth, dir);
+                      }}
                       className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                         impactDirection === dir
                           ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300"
@@ -337,7 +342,11 @@ export default function ScoreDetailPage() {
                     min={1}
                     max={5}
                     value={impactDepth}
-                    onChange={(e) => setImpactDepth(Number(e.target.value))}
+                    onChange={(e) => {
+                      const newDepth = Number(e.target.value);
+                      setImpactDepth(newDepth);
+                      if (impactTarget) fetchImpact(impactTarget, newDepth, impactDirection);
+                    }}
                     className="w-20"
                   />
                   <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{impactDepth}</span>
