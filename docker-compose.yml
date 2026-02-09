@@ -1,0 +1,57 @@
+# ---------------------------------------------------------
+# Local development stack for toposcope.
+#
+# Usage:
+#   # Start all services (builds the API image on first run):
+#   docker compose up --build
+#
+#   # Point the API at a local repository (default: current directory):
+#   REPO_PATH=/path/to/repo docker compose up --build
+#
+#   # Stop and remove containers (data volume is preserved):
+#   docker compose down
+# ---------------------------------------------------------
+
+services:
+  # --- PostgreSQL ------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: toposcope
+      POSTGRES_USER: toposcope
+      POSTGRES_PASSWORD: toposcope
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # --- API server (Go) ------------------------------------
+  api:
+    build: .
+    ports:
+      - "7700:7700"
+    command: ["toposcope", "ui", "--port", "7700"]
+    depends_on:
+      - postgres
+    volumes:
+      # Mount a local repository into the container so the API can
+      # analyse it.  Override REPO_PATH to point at a different repo.
+      - ${REPO_PATH:-.}:/repo
+
+  # --- Web frontend (Next.js) -----------------------------
+  web:
+    image: node:20-alpine
+    working_dir: /app/web
+    ports:
+      - "3000:3000"
+    command: sh -c "corepack enable && pnpm install && pnpm dev"
+    depends_on:
+      - api
+    volumes:
+      - ./web:/app/web
+    environment:
+      NEXT_PUBLIC_API_MODE: local
+      NEXT_PUBLIC_API_BASE_URL: http://api:7700
+
+volumes:
+  pgdata:

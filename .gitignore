@@ -1,7 +1,50 @@
+# Build outputs
 bin/
-.toposcope/
+dist/
+bazel-diff.jar
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
 coverage.*
+
+# Toposcope local config/cache
+.toposcope/
+
+# Web / Next.js
 web/node_modules/
 web/.next/
+web/out/
+
+# Environment and secrets
 *.env
+*.env.*
+!*.env.example
+*.pem
+credentials.json
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/*.tfvars
+infra/.terraform.lock.hcl
+
+# Docker
+docker/**/tmp/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
