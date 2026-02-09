@@ -48,13 +48,13 @@ func TestCrossPackageMetric_Basic(t *testing.T) {
 func TestCrossPackageMetric_IntraBoundary(t *testing.T) {
 	base := &graph.Snapshot{
 		Nodes: map[string]*graph.Node{
-			"//app/auth:handler":   {Key: "//app/auth:handler", Package: "//app/auth"},
+			"//app/auth:handler":    {Key: "//app/auth:handler", Package: "//app/auth"},
 			"//app/billing:service": {Key: "//app/billing:service", Package: "//app/billing"},
 		},
 	}
 	head := &graph.Snapshot{
 		Nodes: map[string]*graph.Node{
-			"//app/auth:handler":   {Key: "//app/auth:handler", Package: "//app/auth"},
+			"//app/auth:handler":    {Key: "//app/auth:handler", Package: "//app/auth"},
 			"//app/billing:service": {Key: "//app/billing:service", Package: "//app/billing"},
 		},
 	}
@@ -136,7 +136,7 @@ func TestCrossPackageMetric_SkipsProtoTarget(t *testing.T) {
 	}
 	head := &graph.Snapshot{
 		Nodes: map[string]*graph.Node{
-			"//app/auth:handler":    {Key: "//app/auth:handler", Package: "//app/auth"},
+			"//app/auth:handler":      {Key: "//app/auth:handler", Package: "//app/auth"},
 			"//proto/common:types_go": {Key: "//proto/common:types_go", Kind: "go_proto_library", Package: "//proto/common"},
 		},
 	}

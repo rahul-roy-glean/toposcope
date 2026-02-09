@@ -21,12 +21,12 @@ import (
 )
 
 type config struct {
-	Port           string
-	DatabaseURL    string
-	GCSBucket      string
-	WebhookSecret  string
-	GitHubAppID    string
-	GitHubKey      string
+	Port          string
+	DatabaseURL   string
+	GCSBucket     string
+	WebhookSecret string
+	GitHubAppID   string
+	GitHubKey     string
 }
 
 func loadConfig() config {

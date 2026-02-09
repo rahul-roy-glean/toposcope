@@ -121,7 +121,7 @@ func TestCreditsMetric_FanoutReduction(t *testing.T) {
 func TestCreditsMetric_SameBoundaryNoEdgeCredit(t *testing.T) {
 	base := &graph.Snapshot{
 		Nodes: map[string]*graph.Node{
-			"//app/auth:handler":   {Key: "//app/auth:handler", Package: "//app/auth"},
+			"//app/auth:handler":    {Key: "//app/auth:handler", Package: "//app/auth"},
 			"//app/billing:service": {Key: "//app/billing:service", Package: "//app/billing"},
 		},
 		Edges: []graph.Edge{

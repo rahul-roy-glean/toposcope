@@ -16,10 +16,10 @@ import (
 
 // IngestionStatus represents the lifecycle of an ingestion.
 const (
-	StatusQueued     = "QUEUED"
-	StatusRunning    = "RUNNING"
-	StatusCompleted  = "COMPLETED"
-	StatusFailed     = "FAILED"
+	StatusQueued    = "QUEUED"
+	StatusRunning   = "RUNNING"
+	StatusCompleted = "COMPLETED"
+	StatusFailed    = "FAILED"
 )
 
 // IngestionRequest describes what to ingest.

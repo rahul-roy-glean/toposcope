@@ -26,10 +26,10 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
-		name      string
-		yaml      string
-		wantErr   bool
-		check     func(t *testing.T, cfg *Config)
+		name    string
+		yaml    string
+		wantErr bool
+		check   func(t *testing.T, cfg *Config)
 	}{
 		{
 			name: "non-existent file returns defaults",

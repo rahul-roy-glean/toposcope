@@ -99,14 +99,14 @@ func TestRepositoryOptionalGitHubRepoID(t *testing.T) {
 		isNil  bool
 	}{
 		{
-			name:  "with GitHub repo ID",
+			name:   "with GitHub repo ID",
 			repoID: ptrInt64(999),
-			isNil: false,
+			isNil:  false,
 		},
 		{
-			name:  "without GitHub repo ID",
+			name:   "without GitHub repo ID",
 			repoID: nil,
-			isNil: true,
+			isNil:  true,
 		},
 	}
 

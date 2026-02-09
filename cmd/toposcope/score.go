@@ -21,14 +21,14 @@ import (
 
 func newScoreCmd() *cobra.Command {
 	var (
-		baseRef       string
-		headRef       string
-		repoPath      string
-		bazelPath     string
-		bazelRC       string
-		useCQuery     bool
-		outputFmt     string
-		bazelDiffJar  string
+		baseRef      string
+		headRef      string
+		repoPath     string
+		bazelPath    string
+		bazelRC      string
+		useCQuery    bool
+		outputFmt    string
+		bazelDiffJar string
 	)
 
 	cmd := &cobra.Command{

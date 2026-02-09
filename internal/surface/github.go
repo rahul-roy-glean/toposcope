@@ -51,10 +51,10 @@ func (p *GitHubPublisher) PublishCheckRun(ctx context.Context, installationID in
 	}
 
 	body := map[string]interface{}{
-		"name":        "Toposcope",
-		"head_sha":    headSHA,
-		"status":      "completed",
-		"conclusion":  data.Conclusion,
+		"name":       "Toposcope",
+		"head_sha":   headSHA,
+		"status":     "completed",
+		"conclusion": data.Conclusion,
 		"output": map[string]string{
 			"title":   data.Title,
 			"summary": data.Summary,

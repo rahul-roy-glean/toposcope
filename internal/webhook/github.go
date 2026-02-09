@@ -79,8 +79,8 @@ type PushEvent struct {
 
 // GitRef represents a git reference (branch head).
 type GitRef struct {
-	SHA  string `json:"sha"`
-	Ref  string `json:"ref"`
+	SHA  string           `json:"sha"`
+	Ref  string           `json:"ref"`
 	Repo GitHubRepository `json:"repo"`
 }
 

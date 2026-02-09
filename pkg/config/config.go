@@ -23,11 +23,11 @@ type ScoringConfig struct {
 
 // ExtractionConfig controls extraction behavior.
 type ExtractionConfig struct {
-	Timeout        int    `yaml:"timeout"` // seconds
-	BazelPath      string `yaml:"bazel_path"`
-	BazelRC        string `yaml:"bazelrc"`
-	UseCQuery      bool   `yaml:"use_cquery"`
-	BazelDiffJar   string `yaml:"bazel_diff_jar"` // path to bazel-diff.jar
+	Timeout      int    `yaml:"timeout"` // seconds
+	BazelPath    string `yaml:"bazel_path"`
+	BazelRC      string `yaml:"bazelrc"`
+	UseCQuery    bool   `yaml:"use_cquery"`
+	BazelDiffJar string `yaml:"bazel_diff_jar"` // path to bazel-diff.jar
 }
 
 // DefaultConfig returns a Config with sensible defaults.
@@ -84,10 +84,10 @@ func FindConfigFile(dir string) string {
 // FindBazelDiffJar looks for bazel-diff.jar in common locations.
 func FindBazelDiffJar() string {
 	candidates := []string{
-		"bazel-diff.jar",                                                  // current dir
-		filepath.Join(os.Getenv("HOME"), "bazel-diff.jar"),                // home dir
-		filepath.Join(os.Getenv("HOME"), "bazel-diff_deploy.jar"),         // alternate name
-		filepath.Join(os.Getenv("HOME"), "bin", "bazel-diff.jar"),         // ~/bin
+		"bazel-diff.jar", // current dir
+		filepath.Join(os.Getenv("HOME"), "bazel-diff.jar"),        // home dir
+		filepath.Join(os.Getenv("HOME"), "bazel-diff_deploy.jar"), // alternate name
+		filepath.Join(os.Getenv("HOME"), "bin", "bazel-diff.jar"), // ~/bin
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {

@@ -84,11 +84,11 @@ func TestVerifySignature(t *testing.T) {
 
 func TestParseEvent_Push(t *testing.T) {
 	tests := []struct {
-		name          string
-		payload       PushEvent
-		wantRepo      string
-		wantBranch    string
-		wantAfter     string
+		name       string
+		payload    PushEvent
+		wantRepo   string
+		wantBranch string
+		wantAfter  string
 	}{
 		{
 			name: "push to main",

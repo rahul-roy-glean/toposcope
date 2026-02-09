@@ -177,10 +177,10 @@ type xmlQuery struct {
 }
 
 type xmlRule struct {
-	Class string        `xml:"class,attr"`
-	Name  string        `xml:"name,attr"`
-	Lists []xmlList     `xml:"list"`
-	Attrs []xmlAttrStr  `xml:"string"`
+	Class string       `xml:"class,attr"`
+	Name  string       `xml:"name,attr"`
+	Lists []xmlList    `xml:"list"`
+	Attrs []xmlAttrStr `xml:"string"`
 }
 
 type xmlList struct {

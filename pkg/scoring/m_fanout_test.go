@@ -10,7 +10,7 @@ import (
 func TestFanoutMetric_Basic(t *testing.T) {
 	base := &graph.Snapshot{
 		Nodes: map[string]*graph.Node{
-			"//app:lib": {Key: "//app:lib", Package: "//app"},
+			"//app:lib":  {Key: "//app:lib", Package: "//app"},
 			"//dep1:lib": {Key: "//dep1:lib", Package: "//dep1"},
 			"//dep2:lib": {Key: "//dep2:lib", Package: "//dep2"},
 			"//dep3:lib": {Key: "//dep3:lib", Package: "//dep3"},

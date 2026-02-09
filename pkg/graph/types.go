@@ -8,22 +8,22 @@ import "time"
 // Snapshot represents a point-in-time structural view of a repository's build graph.
 // Snapshots are immutable once created.
 type Snapshot struct {
-	ID          string            `json:"id"`
-	CommitSHA   string            `json:"commit_sha"`
-	Branch      string            `json:"branch,omitempty"` // empty for PR heads
-	Partial     bool              `json:"partial"`          // true for scoped PR extractions
-	Scope       []string          `json:"scope,omitempty"`  // extraction root targets (if partial)
-	Nodes       map[string]*Node  `json:"nodes"`            // keyed by canonical label
-	Edges       []Edge            `json:"edges"`
-	Stats       SnapshotStats     `json:"stats"`
-	ExtractedAt time.Time         `json:"extracted_at"`
+	ID          string           `json:"id"`
+	CommitSHA   string           `json:"commit_sha"`
+	Branch      string           `json:"branch,omitempty"` // empty for PR heads
+	Partial     bool             `json:"partial"`          // true for scoped PR extractions
+	Scope       []string         `json:"scope,omitempty"`  // extraction root targets (if partial)
+	Nodes       map[string]*Node `json:"nodes"`            // keyed by canonical label
+	Edges       []Edge           `json:"edges"`
+	Stats       SnapshotStats    `json:"stats"`
+	ExtractedAt time.Time        `json:"extracted_at"`
 }
 
 // Node represents a single build target in the dependency graph.
 type Node struct {
-	Key        string   `json:"key"`         // canonical Bazel label: "//app/foo:lib"
-	Kind       string   `json:"kind"`        // rule class: "go_library", "java_test", etc.
-	Package    string   `json:"package"`     // Bazel package: "//app/foo"
+	Key        string   `json:"key"`     // canonical Bazel label: "//app/foo:lib"
+	Kind       string   `json:"kind"`    // rule class: "go_library", "java_test", etc.
+	Package    string   `json:"package"` // Bazel package: "//app/foo"
 	Tags       []string `json:"tags,omitempty"`
 	Visibility []string `json:"visibility,omitempty"`
 	IsTest     bool     `json:"is_test"`
@@ -53,15 +53,15 @@ type SnapshotStats struct {
 // Delta represents the structural difference between two snapshots.
 // Deltas are immutable once computed.
 type Delta struct {
-	ID               string   `json:"id"`
-	BaseSnapshotID   string   `json:"base_snapshot_id"`
-	HeadSnapshotID   string   `json:"head_snapshot_id"`
-	ImpactedTargets  []string `json:"impacted_targets"`  // from bazel-diff
-	AddedNodes       []Node   `json:"added_nodes"`
-	RemovedNodes     []Node   `json:"removed_nodes"`
-	AddedEdges       []Edge   `json:"added_edges"`
-	RemovedEdges     []Edge   `json:"removed_edges"`
-	Stats            DeltaStats `json:"stats"`
+	ID              string     `json:"id"`
+	BaseSnapshotID  string     `json:"base_snapshot_id"`
+	HeadSnapshotID  string     `json:"head_snapshot_id"`
+	ImpactedTargets []string   `json:"impacted_targets"` // from bazel-diff
+	AddedNodes      []Node     `json:"added_nodes"`
+	RemovedNodes    []Node     `json:"removed_nodes"`
+	AddedEdges      []Edge     `json:"added_edges"`
+	RemovedEdges    []Edge     `json:"removed_edges"`
+	Stats           DeltaStats `json:"stats"`
 }
 
 // DeltaStats holds summary statistics for a delta.
