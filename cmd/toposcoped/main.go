@@ -47,12 +47,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
-	defer db.Close()
 
 	if err := db.Ping(); err != nil {
 		db.Close()
 		log.Fatalf("ping database: %v", err)
 	}
+	defer db.Close()
 
 	// Initialize services
 	tenantSvc := tenant.NewService(db)
