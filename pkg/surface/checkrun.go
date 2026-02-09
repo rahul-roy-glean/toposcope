@@ -50,7 +50,7 @@ func buildMarkdownSummary(result *scoring.ScoreResult) string {
 
 	// Delta stats
 	sb.WriteString("### Delta Stats\n\n")
-	sb.WriteString(fmt.Sprintf("| Metric | Count |\n|--------|-------|\n"))
+	sb.WriteString("| Metric | Count |\n|--------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Added Nodes | %d |\n", result.DeltaStats.AddedNodes))
 	sb.WriteString(fmt.Sprintf("| Removed Nodes | %d |\n", result.DeltaStats.RemovedNodes))
 	sb.WriteString(fmt.Sprintf("| Added Edges | %d |\n", result.DeltaStats.AddedEdges))

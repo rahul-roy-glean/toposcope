@@ -90,11 +90,12 @@ func (m *CrossPackageMetric) Evaluate(delta *graph.Delta, base, head *graph.Snap
 	_ = boundaries // boundaries used for auto-detection above
 
 	result.Contribution = contribution
-	if contribution > 5 {
+	switch {
+	case contribution > 5:
 		result.Severity = SeverityHigh
-	} else if contribution > 0 {
+	case contribution > 0:
 		result.Severity = SeverityMedium
-	} else {
+	default:
 		result.Severity = SeverityInfo
 	}
 

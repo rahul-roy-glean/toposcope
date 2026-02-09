@@ -7,16 +7,16 @@ type DefaultWeights struct {
 	CrossPackageCrossBoundary float64
 
 	// M2: Fanout increase
-	FanoutWeight        float64
-	FanoutCapPerNode    float64
-	FanoutMinThreshold  int // only score if out-degree exceeds this after change
+	FanoutWeight       float64
+	FanoutCapPerNode   float64
+	FanoutMinThreshold int // only score if out-degree exceeds this after change
 
 	// M3: Centrality penalty
-	CentralityWeight       float64
-	CentralityMinInDegree  int // only apply for targets above this in-degree
+	CentralityWeight      float64
+	CentralityMinInDegree int // only apply for targets above this in-degree
 
 	// M5: Blast radius
-	BlastRadiusWeight float64
+	BlastRadiusWeight          float64
 	BlastRadiusMaxContribution float64
 
 	// M6: Credits

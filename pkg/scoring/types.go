@@ -46,9 +46,9 @@ const (
 // EvidenceItem is a single piece of concrete evidence backing a score contribution.
 type EvidenceItem struct {
 	Type    EvidenceType `json:"type"`
-	Summary string       `json:"summary"` // human-readable explanation
-	From    string       `json:"from,omitempty"` // source node key
-	To      string       `json:"to,omitempty"`   // target node key
+	Summary string       `json:"summary"`         // human-readable explanation
+	From    string       `json:"from,omitempty"`  // source node key
+	To      string       `json:"to,omitempty"`    // target node key
 	Value   float64      `json:"value,omitempty"` // numeric value (degree, count, etc.)
 }
 
@@ -56,18 +56,18 @@ type EvidenceItem struct {
 type EvidenceType string
 
 const (
-	EvidenceEdgeAdded     EvidenceType = "EDGE_ADDED"
-	EvidenceEdgeRemoved   EvidenceType = "EDGE_REMOVED"
-	EvidenceFanoutChange  EvidenceType = "FANOUT_CHANGE"
-	EvidenceCentrality    EvidenceType = "CENTRALITY"
-	EvidenceBlastRadius   EvidenceType = "BLAST_RADIUS"
+	EvidenceEdgeAdded    EvidenceType = "EDGE_ADDED"
+	EvidenceEdgeRemoved  EvidenceType = "EDGE_REMOVED"
+	EvidenceFanoutChange EvidenceType = "FANOUT_CHANGE"
+	EvidenceCentrality   EvidenceType = "CENTRALITY"
+	EvidenceBlastRadius  EvidenceType = "BLAST_RADIUS"
 )
 
 // Hotspot identifies a node that appears across multiple metric findings.
 type Hotspot struct {
-	NodeKey           string  `json:"node_key"`
-	Reason            string  `json:"reason"`
-	ScoreContribution float64 `json:"score_contribution"`
+	NodeKey           string   `json:"node_key"`
+	Reason            string   `json:"reason"`
+	ScoreContribution float64  `json:"score_contribution"`
 	MetricKeys        []string `json:"metric_keys"` // which metrics flagged this node
 }
 

@@ -173,7 +173,7 @@ func runScore(ctx context.Context, opts scoreOpts) error {
 			if err := gitCheckout(ctx, wsRoot, baseSHA); err != nil {
 				return fmt.Errorf("checking out base commit: %w", err)
 			}
-			defer gitCheckout(ctx, wsRoot, origRef) // restore on exit
+			defer func() { _ = gitCheckout(ctx, wsRoot, origRef) }() // restore on exit
 		}
 		baseSnap, err = ext.ExtractFull(ctx, baseSHA, timeout)
 		if err != nil {
@@ -198,7 +198,7 @@ func runScore(ctx context.Context, opts scoreOpts) error {
 			if err := gitCheckout(ctx, wsRoot, headSHA); err != nil {
 				return fmt.Errorf("checking out head commit: %w", err)
 			}
-			defer gitCheckout(ctx, wsRoot, origRef)
+			defer func() { _ = gitCheckout(ctx, wsRoot, origRef) }()
 		}
 		headSnap, err = ext.ExtractFull(ctx, headSHA, timeout)
 		if err != nil {

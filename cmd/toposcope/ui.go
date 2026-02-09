@@ -201,7 +201,7 @@ func (s *localAPIServer) handleScoreDetail(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 func (s *localAPIServer) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +384,7 @@ func (s *localAPIServer) handleSubgraph(w http.ResponseWriter, r *http.Request, 
 	depthStr := r.URL.Query().Get("depth")
 	depth := 2
 	if depthStr != "" {
-		fmt.Sscanf(depthStr, "%d", &depth)
+		_, _ = fmt.Sscanf(depthStr, "%d", &depth)
 	}
 
 	// If no roots specified, return the full graph (capped at 500 nodes for UI performance)
@@ -1049,7 +1049,7 @@ func writeJSON(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(data)
+	_ = enc.Encode(data)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

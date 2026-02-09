@@ -50,6 +50,7 @@ func main() {
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
+		db.Close()
 		log.Fatalf("ping database: %v", err)
 	}
 
@@ -107,7 +108,7 @@ func processHandler(svc *ingestion.Service) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
 	}
 }
 
@@ -118,7 +119,7 @@ func healthHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	}
 }
 

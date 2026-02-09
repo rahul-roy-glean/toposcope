@@ -17,7 +17,7 @@ type Extractor interface {
 
 // ExtractionRequest specifies what to extract and how.
 type ExtractionRequest struct {
-	RepoPath  string          `json:"repo_path"`  // local filesystem path to repo root
+	RepoPath  string          `json:"repo_path"` // local filesystem path to repo root
 	CommitSHA string          `json:"commit_sha"`
 	Scope     ExtractionScope `json:"scope"`
 }
@@ -50,21 +50,21 @@ type ChangeDetector interface {
 
 // ChangeDetectionRequest specifies the commits to compare.
 type ChangeDetectionRequest struct {
-	RepoPath   string `json:"repo_path"`
-	BaseSHA    string `json:"base_sha"`
-	HeadSHA    string `json:"head_sha"`
-	BazelPath  string `json:"bazel_path,omitempty"`  // path to bazel/bazelisk binary
-	BazelRC    string `json:"bazelrc,omitempty"`      // which .bazelrc to use
-	UseCQuery  bool   `json:"use_cquery,omitempty"`
-	CacheDir   string `json:"cache_dir,omitempty"`    // where to cache hash files
+	RepoPath  string `json:"repo_path"`
+	BaseSHA   string `json:"base_sha"`
+	HeadSHA   string `json:"head_sha"`
+	BazelPath string `json:"bazel_path,omitempty"` // path to bazel/bazelisk binary
+	BazelRC   string `json:"bazelrc,omitempty"`    // which .bazelrc to use
+	UseCQuery bool   `json:"use_cquery,omitempty"`
+	CacheDir  string `json:"cache_dir,omitempty"` // where to cache hash files
 }
 
 // ChangeDetectionResult holds the output of change detection.
 type ChangeDetectionResult struct {
-	ImpactedTargets  []string      `json:"impacted_targets"`
-	BaseHashFile     string        `json:"base_hash_file"`
-	HeadHashFile     string        `json:"head_hash_file"`
-	Duration         time.Duration `json:"duration"`
+	ImpactedTargets []string      `json:"impacted_targets"`
+	BaseHashFile    string        `json:"base_hash_file"`
+	HeadHashFile    string        `json:"head_hash_file"`
+	Duration        time.Duration `json:"duration"`
 }
 
 // EdgeType constants for dependency classification.
