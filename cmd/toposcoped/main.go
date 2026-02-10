@@ -1,6 +1,6 @@
 // Command toposcoped is the Toposcope platform service.
-// It serves the GitHub webhook endpoint, the internal processing endpoint,
-// and a health check.
+// It serves the REST API, optional GitHub webhook endpoint,
+// internal processing endpoint, and health checks.
 package main
 
 import (
@@ -19,19 +19,26 @@ import (
 
 	"github.com/toposcope/toposcope/internal/api"
 	"github.com/toposcope/toposcope/internal/ingestion"
+	"github.com/toposcope/toposcope/internal/platform"
 	"github.com/toposcope/toposcope/internal/tenant"
 	"github.com/toposcope/toposcope/internal/webhook"
 )
 
 type config struct {
-	Port          string
-	DatabaseURL   string
-	GCSBucket     string
-	WebhookSecret string
-	GitHubAppID   string
-	GitHubKey     string
-	APIKey        string
-	CacheSize     int
+	Port             string
+	DatabaseURL      string
+	APIKey           string
+	CacheSize        int
+	StorageBackend   string // local | s3 | gcs
+	LocalStoragePath string
+	S3Bucket         string
+	S3Region         string
+	S3Endpoint       string
+	GCSBucket        string
+	AuthMode         string // none | api-key | oidc-proxy
+	AutoMigrate      bool
+	MigrateOnly      bool
+	WebhookSecret    string
 }
 
 func loadConfig() config {
@@ -43,14 +50,20 @@ func loadConfig() config {
 	}
 
 	return config{
-		Port:          envOrDefault("PORT", "8080"),
-		DatabaseURL:   envOrDefault("DATABASE_URL", "postgres://localhost:5432/toposcope?sslmode=disable"),
-		GCSBucket:     os.Getenv("GCS_BUCKET"),
-		WebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
-		GitHubAppID:   os.Getenv("GITHUB_APP_ID"),
-		GitHubKey:     os.Getenv("GITHUB_PRIVATE_KEY"),
-		APIKey:        os.Getenv("API_KEY"),
-		CacheSize:     cacheSize,
+		Port:             envOrDefault("PORT", "8080"),
+		DatabaseURL:      envOrDefault("DATABASE_URL", "postgres://localhost:5432/toposcope?sslmode=disable"),
+		APIKey:           os.Getenv("API_KEY"),
+		CacheSize:        cacheSize,
+		StorageBackend:   envOrDefault("STORAGE_BACKEND", "local"),
+		LocalStoragePath: envOrDefault("LOCAL_STORAGE_PATH", "/tmp/toposcope-data"),
+		S3Bucket:         os.Getenv("S3_BUCKET"),
+		S3Region:         os.Getenv("S3_REGION"),
+		S3Endpoint:       os.Getenv("S3_ENDPOINT"),
+		GCSBucket:        os.Getenv("GCS_BUCKET"),
+		AuthMode:         envOrDefault("AUTH_MODE", "api-key"),
+		AutoMigrate:      os.Getenv("AUTO_MIGRATE") == "true",
+		MigrateOnly:      os.Getenv("MIGRATE_ONLY") == "true",
+		WebhookSecret:    os.Getenv("GITHUB_WEBHOOK_SECRET"),
 	}
 }
 
@@ -68,15 +81,28 @@ func main() {
 	}
 	defer db.Close()
 
+	// Run migrations if requested
+	if cfg.AutoMigrate || cfg.MigrateOnly {
+		log.Println("running database migrations...")
+		if err := platform.AutoMigrate(db); err != nil {
+			log.Fatalf("auto-migrate: %v", err)
+		}
+		log.Println("migrations complete")
+		if cfg.MigrateOnly {
+			log.Println("MIGRATE_ONLY=true, exiting")
+			return
+		}
+	}
+
+	// Initialize storage backend
+	storage, err := initStorage(context.Background(), cfg)
+	if err != nil {
+		log.Fatalf("init storage: %v", err)
+	}
+
 	// Initialize services
 	tenantSvc := tenant.NewService(db)
-
-	storagePath := envOrDefault("LOCAL_STORAGE_PATH", "/tmp/toposcope-data")
-	storage := ingestion.NewLocalStorage(storagePath)
-
 	ingestionSvc := ingestion.NewService(db, tenantSvc, storage, nil, nil)
-
-	webhookHandler := webhook.NewHandler([]byte(cfg.WebhookSecret), tenantSvc, ingestionSvc)
 
 	// Initialize API handler
 	cache := api.NewSnapshotCache(cfg.CacheSize)
@@ -84,7 +110,13 @@ func main() {
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-	mux.Handle("POST /v1/webhooks/github", webhookHandler)
+
+	// Conditionally register webhook handler
+	if cfg.WebhookSecret != "" {
+		webhookHandler := webhook.NewHandler([]byte(cfg.WebhookSecret), tenantSvc, ingestionSvc)
+		mux.Handle("POST /v1/webhooks/github", webhookHandler)
+	}
+
 	mux.HandleFunc("POST /internal/process", processHandler(ingestionSvc))
 	mux.HandleFunc("GET /healthz", healthHandler(db))
 	mux.HandleFunc("GET /health", healthHandler(db))
@@ -92,10 +124,12 @@ func main() {
 	// Register API routes
 	apiHandler.RegisterRoutes(mux)
 
-	// Apply CORS middleware globally, API key auth only on write endpoints
-	authMiddleware := api.APIKeyAuth(cfg.APIKey)
+	// Apply CORS middleware globally, auth middleware on write endpoints
+	authMiddleware := api.WriteAuth(api.AuthMode(cfg.AuthMode), cfg.APIKey)
 	handler := api.CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/") {
+		isWrite := (r.Method == "POST" || r.Method == "PATCH" || r.Method == "DELETE") &&
+			strings.HasPrefix(r.URL.Path, "/api/")
+		if isWrite {
 			authMiddleware(mux).ServeHTTP(w, r)
 			return
 		}
@@ -122,6 +156,23 @@ func main() {
 	log.Println("shutting down...")
 	if err := srv.Shutdown(context.Background()); err != nil {
 		log.Printf("shutdown error: %v", err)
+	}
+}
+
+func initStorage(ctx context.Context, cfg config) (ingestion.StorageClient, error) {
+	switch cfg.StorageBackend {
+	case "s3":
+		return ingestion.NewS3Storage(ctx, ingestion.S3Config{
+			Bucket:    cfg.S3Bucket,
+			Region:    cfg.S3Region,
+			Endpoint:  cfg.S3Endpoint,
+			AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
+			SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		})
+	case "gcs":
+		return ingestion.NewGCSStorage(ctx, cfg.GCSBucket)
+	default: // "local"
+		return ingestion.NewLocalStorage(cfg.LocalStoragePath), nil
 	}
 }
 

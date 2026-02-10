@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/toposcope/toposcope/internal/ingestion"
 	"github.com/toposcope/toposcope/pkg/graph"
 	"github.com/toposcope/toposcope/pkg/scoring"
@@ -15,13 +17,16 @@ import (
 
 // ingestRequest is the JSON body for POST /api/v1/ingest.
 type ingestRequest struct {
-	RepoFullName  string               `json:"repo_full_name"`
-	DefaultBranch string               `json:"default_branch"`
-	CommitSHA     string               `json:"commit_sha"`
-	Branch        string               `json:"branch"`
-	Snapshot      *graph.Snapshot      `json:"snapshot"`
-	Score         *scoring.ScoreResult `json:"score"`
-	BaseSnapshot  *graph.Snapshot      `json:"base_snapshot"`
+	RepoFullName   string               `json:"repo_full_name"`
+	DefaultBranch  string               `json:"default_branch"`
+	CommitSHA      string               `json:"commit_sha"`
+	Branch         string               `json:"branch"`
+	CommittedAt    string               `json:"committed_at"` // RFC3339; if set, used as timestamp instead of now()
+	Snapshot       *graph.Snapshot      `json:"snapshot"`
+	Score          *scoring.ScoreResult `json:"score"`
+	BaseSnapshot   *graph.Snapshot      `json:"base_snapshot"`
+	SnapshotID     string               `json:"snapshot_id"`
+	BaseSnapshotID string               `json:"base_snapshot_id"`
 }
 
 type ingestResponse struct {
@@ -29,6 +34,46 @@ type ingestResponse struct {
 	BaseSnapshotID string `json:"base_snapshot_id,omitempty"`
 	DeltaID        string `json:"delta_id,omitempty"`
 	ScoreID        string `json:"score_id,omitempty"`
+}
+
+// handleUploadSnapshot handles POST /api/v1/snapshots — uploads a single snapshot
+// and returns its storage ID. Used for the two-step ingest flow where large
+// snapshots are uploaded separately from the ingest request.
+func (h *Handler) handleUploadSnapshot(w http.ResponseWriter, r *http.Request) {
+	var body io.Reader = r.Body
+	if r.Header.Get("Content-Encoding") == "gzip" {
+		gz, err := gzip.NewReader(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid gzip body: "+err.Error())
+			return
+		}
+		defer gz.Close()
+		body = gz
+	}
+
+	data, err := io.ReadAll(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read body: "+err.Error())
+		return
+	}
+
+	// Validate that the body is valid JSON snapshot
+	var snap graph.Snapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid snapshot JSON: "+err.Error())
+		return
+	}
+
+	// Generate a storage ID and store the blob
+	snapshotID := uuid.New().String()
+	// Use a synthetic tenant ID for pre-upload; the actual tenant association
+	// happens when the ingest request references this snapshot.
+	if err := h.ingestionSvc.Storage().PutSnapshot(r.Context(), "_uploads", snapshotID, data); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store snapshot: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"snapshot_id": snapshotID})
 }
 
 func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +95,35 @@ func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reference mode: load snapshot from storage if snapshot_id is provided
+	ctx := r.Context()
+	if req.SnapshotID != "" && req.Snapshot == nil {
+		data, err := h.ingestionSvc.Storage().GetSnapshot(ctx, "_uploads", req.SnapshotID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "failed to load referenced snapshot: "+err.Error())
+			return
+		}
+		var snap graph.Snapshot
+		if err := json.Unmarshal(data, &snap); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid referenced snapshot: "+err.Error())
+			return
+		}
+		req.Snapshot = &snap
+	}
+	if req.BaseSnapshotID != "" && req.BaseSnapshot == nil {
+		data, err := h.ingestionSvc.Storage().GetSnapshot(ctx, "_uploads", req.BaseSnapshotID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "failed to load referenced base snapshot: "+err.Error())
+			return
+		}
+		var snap graph.Snapshot
+		if err := json.Unmarshal(data, &snap); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid referenced base snapshot: "+err.Error())
+			return
+		}
+		req.BaseSnapshot = &snap
+	}
+
 	if req.RepoFullName == "" || req.CommitSHA == "" || req.Snapshot == nil {
 		writeError(w, http.StatusBadRequest, "repo_full_name, commit_sha, and snapshot are required")
 		return
@@ -65,8 +139,6 @@ func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
 		orgName = req.RepoFullName[:idx]
 	}
 
-	ctx := r.Context()
-
 	// Ensure tenant and repo exist
 	tenantID, repoID, err := h.tenantSvc.EnsureTenantAndRepo(ctx, orgName, req.RepoFullName, req.DefaultBranch)
 	if err != nil {
@@ -80,6 +152,13 @@ func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
 		RepoFullName: req.RepoFullName,
 		CommitSHA:    req.CommitSHA,
 		BaseBranch:   req.DefaultBranch,
+	}
+
+	// Use commit time if provided
+	if req.CommittedAt != "" {
+		if t, err := time.Parse(time.RFC3339, req.CommittedAt); err == nil {
+			ingReq.CommittedAt = &t
+		}
 	}
 
 	// Store the head snapshot

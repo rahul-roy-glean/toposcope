@@ -664,6 +664,7 @@ export const mockScoreHistory: Record<string, ScoreHistory[]> = {
     const score = Math.round(Math.min(100, Math.max(0, baseScore)));
     return {
       date: date.toISOString().split("T")[0],
+      commit_sha: `abc${i.toString().padStart(4, "0")}def0123456789abcdef0123456789abcdef`,
       total_score: score,
       grade: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F",
       metrics: {
@@ -681,6 +682,7 @@ export const mockScoreHistory: Record<string, ScoreHistory[]> = {
     const score = Math.round(Math.min(100, Math.max(0, 70 + Math.sin(i * 0.4) * 6)));
     return {
       date: date.toISOString().split("T")[0],
+      commit_sha: `bcd${i.toString().padStart(4, "0")}ef0123456789abcdef0123456789abcdef0`,
       total_score: score,
       grade: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F",
       metrics: {
@@ -698,6 +700,7 @@ export const mockScoreHistory: Record<string, ScoreHistory[]> = {
     const score = Math.round(Math.min(100, Math.max(0, 55 + Math.sin(i * 0.3) * 5 - i * 0.5)));
     return {
       date: date.toISOString().split("T")[0],
+      commit_sha: `cde${i.toString().padStart(4, "0")}f0123456789abcdef0123456789abcdef01`,
       total_score: score,
       grade: score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F",
       metrics: {

@@ -1,0 +1,89 @@
+# -- Number of API replicas
+replicaCount: 1
+
+image:
+  repository: ghcr.io/toposcope/toposcope
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (default is appVersion)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # -- Annotations for the service account (e.g. GKE Workload Identity)
+  annotations: {}
+  name: ""
+
+database:
+  host: ""
+  port: 5432
+  name: toposcope
+  user: toposcope
+  password: ""
+  # -- Use an existing secret for the database password
+  existingSecret: ""
+  existingSecretKey: password
+  sslmode: disable
+
+storage:
+  # -- Storage backend: local | s3 | gcs
+  backend: local
+  localPath: /data
+  s3:
+    bucket: ""
+    region: ""
+    endpoint: ""
+    accessKey: ""
+    secretKey: ""
+    existingSecret: ""
+    existingSecretAccessKeyKey: access-key
+    existingSecretSecretKeyKey: secret-key
+  gcs:
+    bucket: ""
+
+auth:
+  # -- Auth mode: none | api-key | oidc-proxy
+  mode: api-key
+  apiKey: ""
+  existingSecret: ""
+  existingSecretKey: api-key
+
+migration:
+  # -- Run database migrations as a pre-install/pre-upgrade Job
+  enabled: true
+
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/toposcope/toposcope-web
+    pullPolicy: IfNotPresent
+    tag: ""
+  service:
+    type: ClusterIP
+    port: 3000
+  resources: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: toposcope.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

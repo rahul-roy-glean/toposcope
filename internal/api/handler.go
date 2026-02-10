@@ -1,5 +1,5 @@
 // Package api implements the hosted Toposcope REST API.
-// It provides ingest and read endpoints backed by Cloud SQL and blob storage.
+// It provides ingest and read endpoints backed by Postgres and blob storage.
 package api
 
 import (
@@ -34,7 +34,13 @@ func NewHandler(db *sql.DB, tenantSvc *tenant.Service, ingestionSvc *ingestion.S
 
 // RegisterRoutes registers all API routes on the given ServeMux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	// Write endpoints (auth-protected)
 	mux.HandleFunc("POST /api/v1/ingest", h.handleIngest)
+	mux.HandleFunc("POST /api/v1/snapshots", h.handleUploadSnapshot)
+	mux.HandleFunc("PATCH /api/repos/{repoID}", h.handleUpdateRepo)
+	mux.HandleFunc("DELETE /api/repos/{repoID}", h.handleDeleteRepo)
+
+	// Read endpoints
 	mux.HandleFunc("GET /api/repos", h.handleListRepos)
 	mux.HandleFunc("GET /api/repos/{repoID}/scores", h.handleListScores)
 	mux.HandleFunc("GET /api/repos/{repoID}/scores/{scoreID}", h.handleGetScore)

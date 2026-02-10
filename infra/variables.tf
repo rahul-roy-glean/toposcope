@@ -35,9 +35,15 @@ variable "api_key" {
 }
 
 variable "container_image" {
-  description = "Container image for the Cloud Run service"
+  description = "Container image for the API Cloud Run service"
   type        = string
-  default     = "us-central1-docker.pkg.dev/scio-ci/glean-images/toposcoped:v0.2.3"
+  default     = "us-central1-docker.pkg.dev/scio-ci/glean-images/toposcoped:v0.3.0"
+}
+
+variable "web_container_image" {
+  description = "Container image for the web UI Cloud Run service"
+  type        = string
+  default     = "us-central1-docker.pkg.dev/scio-ci/glean-images/toposcope-web:v0.3.0"
 }
 
 variable "domain" {

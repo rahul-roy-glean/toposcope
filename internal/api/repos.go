@@ -16,23 +16,32 @@ type repoResponse struct {
 	DefaultBranch string `json:"default_branch"`
 }
 
+type deltaStatsResponse struct {
+	ImpactedTargets int `json:"impacted_targets"`
+	AddedNodes      int `json:"added_nodes"`
+	RemovedNodes    int `json:"removed_nodes"`
+	AddedEdges      int `json:"added_edges"`
+	RemovedEdges    int `json:"removed_edges"`
+}
+
 type scoreResponse struct {
-	ID               string          `json:"id"`
-	TotalScore       float64         `json:"total_score"`
-	Grade            string          `json:"grade"`
-	CommitSHA        string          `json:"commit_sha"`
-	PRNumber         *int            `json:"pr_number,omitempty"`
-	BaseSnapshotID   string          `json:"base_snapshot_id"`
-	HeadSnapshotID   string          `json:"head_snapshot_id"`
-	DeltaID          string          `json:"delta_id"`
-	Breakdown        json.RawMessage `json:"breakdown"`
-	Hotspots         json.RawMessage `json:"hotspots"`
-	SuggestedActions json.RawMessage `json:"suggested_actions"`
-	CreatedAt        string          `json:"created_at"`
+	ID               string              `json:"id"`
+	TotalScore       float64             `json:"total_score"`
+	Grade            string              `json:"grade"`
+	CommitSHA        string              `json:"commit_sha"`
+	PRNumber         *int                `json:"pr_number,omitempty"`
+	BaseSnapshotID   string              `json:"base_snapshot_id"`
+	HeadSnapshotID   string              `json:"head_snapshot_id"`
+	DeltaID          string              `json:"delta_id"`
+	Breakdown        json.RawMessage     `json:"breakdown"`
+	Hotspots         json.RawMessage     `json:"hotspots"`
+	SuggestedActions json.RawMessage     `json:"suggested_actions"`
+	DeltaStats       *deltaStatsResponse `json:"delta_stats,omitempty"`
+	CreatedAt        string              `json:"created_at"`
 }
 
 func scoreRowToResponse(sc *tenant.ScoreRow) scoreResponse {
-	return scoreResponse{
+	resp := scoreResponse{
 		ID:               sc.ID,
 		TotalScore:       sc.TotalScore,
 		Grade:            sc.Grade,
@@ -46,6 +55,16 @@ func scoreRowToResponse(sc *tenant.ScoreRow) scoreResponse {
 		SuggestedActions: sc.SuggestedActions,
 		CreatedAt:        sc.CreatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+	if sc.DeltaID != "" {
+		resp.DeltaStats = &deltaStatsResponse{
+			ImpactedTargets: sc.AddedNodes + sc.RemovedNodes,
+			AddedNodes:      sc.AddedNodes,
+			RemovedNodes:    sc.RemovedNodes,
+			AddedEdges:      sc.AddedEdges,
+			RemovedEdges:    sc.RemovedEdges,
+		}
+	}
+	return resp
 }
 
 func (h *Handler) handleListRepos(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +132,7 @@ var metricKeyMap = map[string]string{
 
 type historyEntry struct {
 	Date       string             `json:"date"`
+	CommitSHA  string             `json:"commit_sha"`
 	TotalScore float64            `json:"total_score"`
 	Grade      string             `json:"grade"`
 	Metrics    map[string]float64 `json:"metrics"`
@@ -121,7 +141,8 @@ type historyEntry struct {
 func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 	repoID := r.PathValue("repoID")
 
-	scores, err := h.tenantSvc.ListScoresByRepo(r.Context(), repoID)
+	// Only show default branch scores in history (exclude PR analyses)
+	scores, err := h.tenantSvc.ListDefaultBranchScores(r.Context(), repoID)
 	if err != nil {
 		writeJSON(w, http.StatusOK, []historyEntry{})
 		return
@@ -147,6 +168,7 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 
 		history = append(history, historyEntry{
 			Date:       date,
+			CommitSHA:  sc.CommitSHA,
 			TotalScore: sc.TotalScore,
 			Grade:      sc.Grade,
 			Metrics:    metrics,

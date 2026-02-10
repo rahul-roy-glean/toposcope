@@ -124,7 +124,7 @@ func (s *Service) ListRepositories(ctx context.Context, tenantID string) ([]Repo
 	return repos, rows.Err()
 }
 
-// ScoreRow represents a score record from the database.
+// ScoreRow represents a score record from the database, with optional delta stats.
 type ScoreRow struct {
 	ID               string
 	TenantID         string
@@ -140,6 +140,11 @@ type ScoreRow struct {
 	Hotspots         json.RawMessage
 	SuggestedActions json.RawMessage
 	CreatedAt        time.Time
+	// Delta stats (from LEFT JOIN with deltas table)
+	AddedNodes   int
+	RemovedNodes int
+	AddedEdges   int
+	RemovedEdges int
 }
 
 // SnapshotRow represents snapshot metadata from the database.
@@ -238,12 +243,17 @@ func (s *Service) ListAllRepos(ctx context.Context) ([]Repository, error) {
 }
 
 // ListScoresByRepo returns all scores for a repository, newest first.
+// Delta stats are included via a LEFT JOIN with the deltas table.
 func (s *Service) ListScoresByRepo(ctx context.Context, repoID string) ([]ScoreRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
-		        base_snapshot_id, head_snapshot_id, delta_id,
-		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
-		 FROM scores WHERE repo_id = $1 ORDER BY created_at DESC`,
+		`SELECT s.id, s.tenant_id, s.repo_id, s.pr_number, s.commit_sha,
+		        s.base_snapshot_id, s.head_snapshot_id, s.delta_id,
+		        s.total_score, s.grade, s.breakdown, s.hotspots, s.suggested_actions, s.created_at,
+		        COALESCE(d.added_nodes, 0), COALESCE(d.removed_nodes, 0),
+		        COALESCE(d.added_edges, 0), COALESCE(d.removed_edges, 0)
+		 FROM scores s
+		 LEFT JOIN deltas d ON d.id = s.delta_id
+		 WHERE s.repo_id = $1 ORDER BY s.created_at DESC`,
 		repoID,
 	)
 	if err != nil {
@@ -258,6 +268,42 @@ func (s *Service) ListScoresByRepo(ctx context.Context, repoID string) ([]ScoreR
 			&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
 			&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
 			&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+			&sc.AddedNodes, &sc.RemovedNodes, &sc.AddedEdges, &sc.RemovedEdges,
+		); err != nil {
+			return nil, fmt.Errorf("scan score: %w", err)
+		}
+		scores = append(scores, sc)
+	}
+	return scores, rows.Err()
+}
+
+// ListDefaultBranchScores returns scores for default branch pushes (pr_number IS NULL), newest first.
+func (s *Service) ListDefaultBranchScores(ctx context.Context, repoID string) ([]ScoreRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT s.id, s.tenant_id, s.repo_id, s.pr_number, s.commit_sha,
+		        s.base_snapshot_id, s.head_snapshot_id, s.delta_id,
+		        s.total_score, s.grade, s.breakdown, s.hotspots, s.suggested_actions, s.created_at,
+		        COALESCE(d.added_nodes, 0), COALESCE(d.removed_nodes, 0),
+		        COALESCE(d.added_edges, 0), COALESCE(d.removed_edges, 0)
+		 FROM scores s
+		 LEFT JOIN deltas d ON d.id = s.delta_id
+		 WHERE s.repo_id = $1 AND s.pr_number IS NULL
+		 ORDER BY s.created_at DESC`,
+		repoID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list default branch scores: %w", err)
+	}
+	defer rows.Close()
+
+	var scores []ScoreRow
+	for rows.Next() {
+		var sc ScoreRow
+		if err := rows.Scan(
+			&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
+			&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
+			&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+			&sc.AddedNodes, &sc.RemovedNodes, &sc.AddedEdges, &sc.RemovedEdges,
 		); err != nil {
 			return nil, fmt.Errorf("scan score: %w", err)
 		}
@@ -270,15 +316,20 @@ func (s *Service) ListScoresByRepo(ctx context.Context, repoID string) ([]ScoreR
 func (s *Service) GetScoreByID(ctx context.Context, scoreID string) (*ScoreRow, error) {
 	sc := &ScoreRow{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
-		        base_snapshot_id, head_snapshot_id, delta_id,
-		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
-		 FROM scores WHERE id = $1`,
+		`SELECT s.id, s.tenant_id, s.repo_id, s.pr_number, s.commit_sha,
+		        s.base_snapshot_id, s.head_snapshot_id, s.delta_id,
+		        s.total_score, s.grade, s.breakdown, s.hotspots, s.suggested_actions, s.created_at,
+		        COALESCE(d.added_nodes, 0), COALESCE(d.removed_nodes, 0),
+		        COALESCE(d.added_edges, 0), COALESCE(d.removed_edges, 0)
+		 FROM scores s
+		 LEFT JOIN deltas d ON d.id = s.delta_id
+		 WHERE s.id = $1`,
 		scoreID,
 	).Scan(
 		&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
 		&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
 		&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+		&sc.AddedNodes, &sc.RemovedNodes, &sc.AddedEdges, &sc.RemovedEdges,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get score %s: %w", scoreID, err)
@@ -290,21 +341,72 @@ func (s *Service) GetScoreByID(ctx context.Context, scoreID string) (*ScoreRow, 
 func (s *Service) GetScoreByPR(ctx context.Context, repoID string, prNumber int) (*ScoreRow, error) {
 	sc := &ScoreRow{}
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, tenant_id, repo_id, pr_number, commit_sha,
-		        base_snapshot_id, head_snapshot_id, delta_id,
-		        total_score, grade, breakdown, hotspots, suggested_actions, created_at
-		 FROM scores WHERE repo_id = $1 AND pr_number = $2
-		 ORDER BY created_at DESC LIMIT 1`,
+		`SELECT s.id, s.tenant_id, s.repo_id, s.pr_number, s.commit_sha,
+		        s.base_snapshot_id, s.head_snapshot_id, s.delta_id,
+		        s.total_score, s.grade, s.breakdown, s.hotspots, s.suggested_actions, s.created_at,
+		        COALESCE(d.added_nodes, 0), COALESCE(d.removed_nodes, 0),
+		        COALESCE(d.added_edges, 0), COALESCE(d.removed_edges, 0)
+		 FROM scores s
+		 LEFT JOIN deltas d ON d.id = s.delta_id
+		 WHERE s.repo_id = $1 AND s.pr_number = $2
+		 ORDER BY s.created_at DESC LIMIT 1`,
 		repoID, prNumber,
 	).Scan(
 		&sc.ID, &sc.TenantID, &sc.RepoID, &sc.PRNumber, &sc.CommitSHA,
 		&sc.BaseSnapshotID, &sc.HeadSnapshotID, &sc.DeltaID,
 		&sc.TotalScore, &sc.Grade, &sc.Breakdown, &sc.Hotspots, &sc.SuggestedActions, &sc.CreatedAt,
+		&sc.AddedNodes, &sc.RemovedNodes, &sc.AddedEdges, &sc.RemovedEdges,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get score for PR %d: %w", prNumber, err)
 	}
 	return sc, nil
+}
+
+// UpdateRepoDefaultBranch updates the default branch for a repository.
+func (s *Service) UpdateRepoDefaultBranch(ctx context.Context, repoID, defaultBranch string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE repositories SET default_branch = $1 WHERE id = $2`,
+		defaultBranch, repoID,
+	)
+	if err != nil {
+		return fmt.Errorf("update repo default branch: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("repository %s not found", repoID)
+	}
+	return nil
+}
+
+// DeleteRepo deletes a repository and all associated data in FK order within a transaction.
+func (s *Service) DeleteRepo(ctx context.Context, repoID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete in FK dependency order
+	queries := []string{
+		`DELETE FROM ingestions WHERE repo_id = $1`,
+		`DELETE FROM scores WHERE repo_id = $1`,
+		`DELETE FROM deltas WHERE repo_id = $1`,
+		`DELETE FROM baselines WHERE repo_id = $1`,
+		`DELETE FROM snapshots WHERE repo_id = $1`,
+		`DELETE FROM repositories WHERE id = $1`,
+	}
+
+	for _, q := range queries {
+		if _, err := tx.ExecContext(ctx, q, repoID); err != nil {
+			return fmt.Errorf("delete repo cascade: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // GetSnapshotByID returns snapshot metadata by ID.

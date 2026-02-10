@@ -20,7 +20,7 @@ interface SnapshotInfo {
   package_count: number;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:7700";
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 async function fetchJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -73,16 +73,38 @@ export default function GraphExplorerPage() {
   const [selectedPathNode, setSelectedPathNode] = useState<string | null>(null);
   const [highlightedPathIndex, setHighlightedPathIndex] = useState<number | null>(null);
 
-  // Load snapshot list on mount
+  // Load latest snapshot for this repo via the scores endpoint
   useEffect(() => {
     async function load() {
       try {
-        const snapList = await fetchJSON<SnapshotInfo[]>("/api/snapshots/");
-        if (snapList.length > 0) {
-          setSnapInfo(snapList[0]);
-          setSnapshotId(snapList[0].commit_sha);
+        // Get scores for this repo to find the latest head_snapshot_id
+        const scores = await fetchJSON<{ head_snapshot_id: string; commit_sha: string }[]>(
+          `/api/repos/${params.repoId}/scores`
+        );
+        if (scores.length > 0 && scores[0].head_snapshot_id) {
+          const snapshotId = scores[0].head_snapshot_id;
+          setSnapshotId(snapshotId);
+          // Fetch snapshot metadata
+          try {
+            const snap = await fetchJSON<SnapshotInfo>(`/api/snapshots/${snapshotId}`);
+            setSnapInfo({
+              id: snapshotId,
+              commit_sha: snap.commit_sha ?? scores[0].commit_sha,
+              node_count: snap.node_count ?? 0,
+              edge_count: snap.edge_count ?? 0,
+              package_count: snap.package_count ?? 0,
+            });
+          } catch {
+            setSnapInfo({
+              id: snapshotId,
+              commit_sha: scores[0].commit_sha,
+              node_count: 0,
+              edge_count: 0,
+              package_count: 0,
+            });
+          }
         } else {
-          setError("No snapshots available");
+          setError("No snapshots available for this repository");
         }
       } catch {
         setError("Could not connect to API server");
@@ -286,7 +308,7 @@ export default function GraphExplorerPage() {
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Graph Explorer</h1>
         {snapInfo && (
           <p className="mt-1 text-sm text-zinc-500">
-            Snapshot {snapInfo.commit_sha.slice(0, 8)} &mdash; {snapInfo.node_count.toLocaleString()} targets, {snapInfo.package_count.toLocaleString()} packages
+            Snapshot {(snapInfo.commit_sha ?? "").slice(0, 8) || "unknown"} &mdash; {snapInfo.node_count.toLocaleString()} targets, {snapInfo.package_count.toLocaleString()} packages
           </p>
         )}
       </div>

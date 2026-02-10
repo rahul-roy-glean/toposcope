@@ -1,6 +1,11 @@
 output "service_url" {
-  description = "Cloud Run service URL"
+  description = "Cloud Run API service URL"
   value       = google_cloud_run_v2_service.main.uri
+}
+
+output "web_service_url" {
+  description = "Cloud Run web UI service URL"
+  value       = google_cloud_run_v2_service.web.uri
 }
 
 output "database_connection" {

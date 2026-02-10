@@ -97,6 +97,7 @@ export interface Repository {
 
 export interface ScoreHistory {
   date: string;
+  commit_sha: string;
   total_score: number;
   grade: string;
   metrics: Record<string, number>;

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/toposcope/toposcope/pkg/graph"
 	"github.com/toposcope/toposcope/pkg/graphquery"
@@ -25,8 +27,16 @@ func (h *Handler) loadSnapshot(ctx context.Context, snapshotID string) (*graph.S
 		return nil, fmt.Errorf("snapshot metadata: %w", err)
 	}
 
+	// Extract the blob ID from storage_ref (format: "snapshots/{tenantID}/{blobID}.json").
+	// The blob ID may differ from the DB-generated snapshot UUID.
+	blobID := snapshotID
+	if snapshotRow.StorageRef != "" {
+		base := path.Base(snapshotRow.StorageRef)
+		blobID = strings.TrimSuffix(base, ".json")
+	}
+
 	// Load from storage
-	data, err := h.ingestionSvc.Storage().GetSnapshot(ctx, snapshotRow.TenantID, snapshotID)
+	data, err := h.ingestionSvc.Storage().GetSnapshot(ctx, snapshotRow.TenantID, blobID)
 	if err != nil {
 		return nil, fmt.Errorf("load snapshot blob: %w", err)
 	}

@@ -40,6 +40,7 @@ export default function RepoOverviewPage() {
   }
 
   const latest = scores[0];
+  const deltaStats = latest?.delta_stats;
 
   return (
     <div className="p-8">
@@ -79,7 +80,7 @@ export default function RepoOverviewPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {latest.delta_stats.impacted_targets}
+                      {deltaStats?.impacted_targets ?? 0}
                     </p>
                     <p className="text-xs text-zinc-500">Impacted Targets</p>
                   </div>
@@ -95,7 +96,7 @@ export default function RepoOverviewPage() {
                   </div>
                   <div>
                     <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                      +{latest.delta_stats.added_nodes} / -{latest.delta_stats.removed_nodes}
+                      +{deltaStats?.added_nodes ?? 0} / -{deltaStats?.removed_nodes ?? 0}
                     </p>
                     <p className="text-xs text-zinc-500">Nodes Added/Removed</p>
                   </div>
@@ -111,7 +112,7 @@ export default function RepoOverviewPage() {
                   </div>
                   <div>
                     <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                      +{latest.delta_stats.added_edges} / -{latest.delta_stats.removed_edges}
+                      +{deltaStats?.added_edges ?? 0} / -{deltaStats?.removed_edges ?? 0}
                     </p>
                     <p className="text-xs text-zinc-500">Edges Added/Removed</p>
                   </div>
@@ -157,6 +158,7 @@ export default function RepoOverviewPage() {
                 const href = score.pr_number
                   ? `/repos/${params.repoId}/prs/${score.pr_number}`
                   : `/repos/${params.repoId}/scores/${score.id ?? i}`;
+                const stats = score.delta_stats;
                 return (
                   <Link
                     key={score.id ?? i}
@@ -166,10 +168,10 @@ export default function RepoOverviewPage() {
                     <GradeBadge grade={score.grade} size="sm" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {score.pr_number ? `PR #${score.pr_number}` : `${score.base_commit.slice(0, 7)}..${score.head_commit.slice(0, 7)}`}
+                        {score.pr_number ? `PR #${score.pr_number}` : `${(score.base_commit ?? "").slice(0, 7)}..${(score.head_commit ?? "").slice(0, 7)}`}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {score.delta_stats.impacted_targets} targets impacted
+                        {stats?.impacted_targets ?? 0} targets impacted
                         {score.analyzed_at && ` | ${new Date(score.analyzed_at).toLocaleDateString()}`}
                       </p>
                     </div>

@@ -31,6 +31,7 @@ type IngestionRequest struct {
 	BaseBranch     string
 	PRNumber       *int
 	InstallationID int64
+	CommittedAt    *time.Time // If set, used as timestamp instead of now()
 }
 
 // Scorer abstracts the scoring engine so the ingestion package does not
@@ -262,15 +263,28 @@ func (s *Service) StoreSnapshot(ctx context.Context, req IngestionRequest, snap 
 	}
 
 	var id string
-	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO snapshots (tenant_id, repo_id, commit_sha, branch, node_count, edge_count, package_count, extraction_ms, storage_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		 ON CONFLICT (repo_id, commit_sha) DO UPDATE SET storage_ref = EXCLUDED.storage_ref
-		 RETURNING id`,
-		req.TenantID, req.RepoID, snap.CommitSHA, nilIfEmpty(snap.Branch),
-		snap.Stats.NodeCount, snap.Stats.EdgeCount, snap.Stats.PackageCount, snap.Stats.ExtractionMs,
-		storageRef,
-	).Scan(&id)
+	var err error
+	if req.CommittedAt != nil {
+		err = s.db.QueryRowContext(ctx,
+			`INSERT INTO snapshots (tenant_id, repo_id, commit_sha, branch, node_count, edge_count, package_count, extraction_ms, storage_ref, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 ON CONFLICT (repo_id, commit_sha) DO UPDATE SET storage_ref = EXCLUDED.storage_ref, created_at = EXCLUDED.created_at
+			 RETURNING id`,
+			req.TenantID, req.RepoID, snap.CommitSHA, nilIfEmpty(snap.Branch),
+			snap.Stats.NodeCount, snap.Stats.EdgeCount, snap.Stats.PackageCount, snap.Stats.ExtractionMs,
+			storageRef, *req.CommittedAt,
+		).Scan(&id)
+	} else {
+		err = s.db.QueryRowContext(ctx,
+			`INSERT INTO snapshots (tenant_id, repo_id, commit_sha, branch, node_count, edge_count, package_count, extraction_ms, storage_ref)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 ON CONFLICT (repo_id, commit_sha) DO UPDATE SET storage_ref = EXCLUDED.storage_ref
+			 RETURNING id`,
+			req.TenantID, req.RepoID, snap.CommitSHA, nilIfEmpty(snap.Branch),
+			snap.Stats.NodeCount, snap.Stats.EdgeCount, snap.Stats.PackageCount, snap.Stats.ExtractionMs,
+			storageRef,
+		).Scan(&id)
+	}
 	if err != nil {
 		return "", fmt.Errorf("insert snapshot row: %w", err)
 	}
@@ -317,15 +331,28 @@ func (s *Service) StoreScore(ctx context.Context, req IngestionRequest, baseSnap
 	}
 
 	var id string
-	err = s.db.QueryRowContext(ctx,
-		`INSERT INTO scores (tenant_id, repo_id, pr_number, commit_sha, base_snapshot_id, head_snapshot_id, delta_id, total_score, grade, breakdown, hotspots, suggested_actions)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		 RETURNING id`,
-		req.TenantID, req.RepoID, req.PRNumber, req.CommitSHA,
-		baseSnapshotID, headSnapshotID, deltaID,
-		result.TotalScore, result.Grade,
-		breakdownJSON, hotspotsJSON, actionsJSON,
-	).Scan(&id)
+	if req.CommittedAt != nil {
+		err = s.db.QueryRowContext(ctx,
+			`INSERT INTO scores (tenant_id, repo_id, pr_number, commit_sha, base_snapshot_id, head_snapshot_id, delta_id, total_score, grade, breakdown, hotspots, suggested_actions, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 RETURNING id`,
+			req.TenantID, req.RepoID, req.PRNumber, req.CommitSHA,
+			baseSnapshotID, headSnapshotID, deltaID,
+			result.TotalScore, result.Grade,
+			breakdownJSON, hotspotsJSON, actionsJSON,
+			*req.CommittedAt,
+		).Scan(&id)
+	} else {
+		err = s.db.QueryRowContext(ctx,
+			`INSERT INTO scores (tenant_id, repo_id, pr_number, commit_sha, base_snapshot_id, head_snapshot_id, delta_id, total_score, grade, breakdown, hotspots, suggested_actions)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			 RETURNING id`,
+			req.TenantID, req.RepoID, req.PRNumber, req.CommitSHA,
+			baseSnapshotID, headSnapshotID, deltaID,
+			result.TotalScore, result.Grade,
+			breakdownJSON, hotspotsJSON, actionsJSON,
+		).Scan(&id)
+	}
 	if err != nil {
 		return "", fmt.Errorf("insert score row: %w", err)
 	}

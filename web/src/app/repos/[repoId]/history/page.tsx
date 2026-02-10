@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   LineChart,
@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { GradeBadge } from "@/components/scoring/grade-badge";
 import { getAPI } from "@/lib/api";
@@ -37,10 +38,15 @@ const METRIC_NAMES: Record<string, string> = {
   m6_churn: "Churn",
 };
 
+const PAGE_SIZE = 25;
+const GITHUB_BASE = "https://github.com/askscio/scio/commit";
+
 export default function ScoreHistoryPage() {
   const params = useParams<{ repoId: string }>();
   const [history, setHistory] = useState<ScoreHistory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [gradeFilter, setGradeFilter] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -51,6 +57,31 @@ export default function ScoreHistoryPage() {
     }
     load();
   }, [params.repoId]);
+
+  // Filtered + reversed (newest first)
+  const filtered = useMemo(() => {
+    const reversed = [...history].reverse();
+    if (!gradeFilter) return reversed;
+    return reversed.filter((h) => h.grade === gradeFilter);
+  }, [history, gradeFilter]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageData = useMemo(
+    () => filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+    [filtered, page]
+  );
+
+  // Available grades for filter
+  const availableGrades = useMemo(() => {
+    const grades = new Set(history.map((h) => h.grade));
+    return ["A", "B", "C", "D", "F"].filter((g) => grades.has(g));
+  }, [history]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setPage(0);
+  }, [gradeFilter]);
 
   if (loading) {
     return (
@@ -164,7 +195,40 @@ export default function ScoreHistoryPage() {
       {/* History Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Score History</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Score History</CardTitle>
+            <div className="flex items-center gap-2">
+              {/* Grade Filter */}
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5">
+                <button
+                  onClick={() => setGradeFilter(null)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    gradeFilter === null
+                      ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                  }`}
+                >
+                  All
+                </button>
+                {availableGrades.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setGradeFilter(gradeFilter === g ? null : g)}
+                    className={`px-2 py-1 transition-colors rounded ${
+                      gradeFilter === g
+                        ? "bg-zinc-200 dark:bg-zinc-700"
+                        : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <GradeBadge grade={g} size="sm" />
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-zinc-400">
+                {filtered.length} entries
+              </span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -172,6 +236,7 @@ export default function ScoreHistoryPage() {
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800">
                   <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Date</th>
+                  <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Commit</th>
                   <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Grade</th>
                   <th className="py-2 pr-4 text-right text-xs font-medium text-zinc-500">Score</th>
                   {Object.keys(METRIC_NAMES).map((key) => (
@@ -185,13 +250,28 @@ export default function ScoreHistoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...history].reverse().map((h) => (
+                {pageData.map((h, i) => (
                   <tr
-                    key={h.date}
+                    key={`${h.date}-${h.commit_sha}-${i}`}
                     className="border-b border-zinc-100 dark:border-zinc-800/50"
                   >
                     <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
                       {h.date}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {h.commit_sha ? (
+                        <a
+                          href={`${GITHUB_BASE}/${h.commit_sha}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-mono text-xs text-emerald-600 hover:text-emerald-500 hover:underline dark:text-emerald-400"
+                        >
+                          {h.commit_sha.slice(0, 8)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span className="font-mono text-xs text-zinc-400">-</span>
+                      )}
                     </td>
                     <td className="py-2 pr-4">
                       <GradeBadge grade={h.grade} size="sm" />
@@ -216,6 +296,36 @@ export default function ScoreHistoryPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              <span className="text-xs text-zinc-500">
+                Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                  Prev
+                </button>
+                <span className="text-xs text-zinc-500">
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Next
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
