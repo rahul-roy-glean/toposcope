@@ -168,11 +168,11 @@ export default function RepoOverviewPage() {
                     <GradeBadge grade={score.grade} size="sm" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {score.pr_number ? `PR #${score.pr_number}` : `${(score.base_commit ?? "").slice(0, 7)}..${(score.head_commit ?? "").slice(0, 7)}`}
+                        {score.pr_number ? `PR #${score.pr_number}` : (score.commit_sha ?? "").slice(0, 8)}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {stats?.impacted_targets ?? 0} targets impacted
-                        {score.analyzed_at && ` | ${new Date(score.analyzed_at).toLocaleDateString()}`}
+                        {stats ? `+${stats.added_nodes}/-${stats.removed_nodes} nodes` : "no delta"}
+                        {score.created_at && ` | ${new Date(score.created_at).toLocaleDateString()}`}
                       </p>
                     </div>
                     <span className="font-mono text-sm font-semibold text-zinc-700 dark:text-zinc-300">

@@ -63,7 +63,7 @@ export default function PRImpactPage() {
         </h1>
         <p className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
           <GitCommit className="h-3.5 w-3.5" />
-          {score.base_commit.slice(0, 7)}...{score.head_commit.slice(0, 7)}
+          {(score.commit_sha ?? "").slice(0, 8)}
         </p>
       </div>
 

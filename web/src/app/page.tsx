@@ -55,7 +55,7 @@ export default function DashboardPage() {
       }
     }
   }
-  recentPRs.sort((a, b) => (b.score.analyzed_at ?? "").localeCompare(a.score.analyzed_at ?? ""));
+  recentPRs.sort((a, b) => (b.score.created_at ?? "").localeCompare(a.score.created_at ?? ""));
 
   // Stats
   const totalPRs = recentPRs.length;

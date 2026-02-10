@@ -65,10 +65,14 @@ for ((i=1; i<${#COMMIT_ARRAY[@]}; i++)); do
     continue
   fi
 
+  # Get the commit timestamp (RFC3339)
+  COMMITTED_AT=$(git show -s --format=%cI "$HEAD_SHA")
+
   # Build payload
   jq -n \
     --arg repo "$REPO_NAME" \
     --arg sha "$HEAD_SHA" \
+    --arg committed_at "$COMMITTED_AT" \
     --slurpfile head "$CACHE_DIR/$HEAD_SHA.json" \
     --slurpfile base "$CACHE_DIR/$BASE_SHA.json" \
     --slurpfile score /tmp/score.json \
@@ -77,6 +81,7 @@ for ((i=1; i<${#COMMIT_ARRAY[@]}; i++)); do
       default_branch: "main",
       commit_sha: $sha,
       branch: "main",
+      committed_at: $committed_at,
       snapshot: $head[0],
       base_snapshot: $base[0],
       score: $score[0]

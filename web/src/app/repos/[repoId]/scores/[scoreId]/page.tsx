@@ -42,10 +42,10 @@ export default function ScoreDetailPage() {
         setScore(s);
 
         // Load subgraph around hotspot nodes from the head snapshot
-        if (s.head_commit && s.hotspots?.length > 0) {
+        if (s.head_snapshot_id && s.hotspots?.length > 0) {
           const hotspotKeys = s.hotspots.map((h) => h.node_key);
           try {
-            const sub = await api.getSubgraph(s.head_commit, hotspotKeys, 1);
+            const sub = await api.getSubgraph(s.head_snapshot_id, hotspotKeys, 1);
             setGraphNodes(sub.nodes);
             setGraphEdges(sub.edges);
           } catch {
@@ -57,7 +57,7 @@ export default function ScoreDetailPage() {
           setImpactTarget(firstTarget);
           setImpactLoading(true);
           try {
-            const impact = await api.getEgoGraph(s.head_commit, firstTarget, { depth: 2, direction: "both" });
+            const impact = await api.getEgoGraph(s.head_snapshot_id, firstTarget, { depth: 2, direction: "both" });
             setImpactNodes(impact.nodes || {});
             setImpactEdges(impact.edges || []);
             setImpactTruncated(impact.truncated || false);
@@ -93,15 +93,15 @@ export default function ScoreDetailPage() {
   }, [score]);
 
   // Fetch transitive impact ego graph for a hotspot
-  const headCommit = score?.head_commit;
+  const headSnapshotId = score?.head_snapshot_id;
   const fetchImpact = useCallback(async (target: string, depth: number, direction: "deps" | "rdeps" | "both") => {
-    if (!headCommit) return;
+    if (!headSnapshotId) return;
     setImpactLoading(true);
     setImpactTarget(target);
     setSelectedImpactNode(null);
     try {
       const api = await getAPI();
-      const data = await api.getEgoGraph(headCommit, target, { depth, direction });
+      const data = await api.getEgoGraph(headSnapshotId, target, { depth, direction });
       setImpactNodes(data.nodes || {});
       setImpactEdges(data.edges || []);
       setImpactTruncated(data.truncated || false);
@@ -110,7 +110,7 @@ export default function ScoreDetailPage() {
       setImpactEdges([]);
     }
     setImpactLoading(false);
-  }, [headCommit]);
+  }, [headSnapshotId]);
 
   if (loading) {
     return (
@@ -128,6 +128,7 @@ export default function ScoreDetailPage() {
     );
   }
 
+  const deltaStats = score.delta_stats;
   const hotspotNodeKeys = new Set((score.hotspots ?? []).map((h) => h.node_key));
 
   return (
@@ -145,9 +146,9 @@ export default function ScoreDetailPage() {
         </h1>
         <p className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
           <GitCommit className="h-3.5 w-3.5" />
-          {score.base_commit.slice(0, 7)}...{score.head_commit.slice(0, 7)}
-          {score.analyzed_at && (
-            <span className="text-zinc-400">| {new Date(score.analyzed_at).toLocaleString()}</span>
+          {(score.commit_sha ?? "").slice(0, 8)}
+          {score.created_at && (
+            <span className="text-zinc-400">| {new Date(score.created_at).toLocaleString()}</span>
           )}
         </p>
       </div>
@@ -172,7 +173,7 @@ export default function ScoreDetailPage() {
               <Target className="h-4 w-4 text-sky-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.impacted_targets}
+                  {deltaStats?.impacted_targets ?? 0}
                 </p>
                 <p className="text-[10px] text-zinc-500">Impacted Targets</p>
               </div>
@@ -186,7 +187,7 @@ export default function ScoreDetailPage() {
               <Plus className="h-4 w-4 text-emerald-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.added_nodes}
+                  {deltaStats?.added_nodes ?? 0}
                 </p>
                 <p className="text-[10px] text-zinc-500">Nodes Added</p>
               </div>
@@ -200,7 +201,7 @@ export default function ScoreDetailPage() {
               <Minus className="h-4 w-4 text-red-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.removed_nodes}
+                  {deltaStats?.removed_nodes ?? 0}
                 </p>
                 <p className="text-[10px] text-zinc-500">Nodes Removed</p>
               </div>
@@ -213,11 +214,11 @@ export default function ScoreDetailPage() {
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                 <Plus className="h-3 w-3 text-emerald-500" />
-                {score.delta_stats.added_edges} edges
+                {deltaStats?.added_edges ?? 0} edges
               </div>
               <div className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                 <Minus className="h-3 w-3 text-red-500" />
-                {score.delta_stats.removed_edges} edges
+                {deltaStats?.removed_edges ?? 0} edges
               </div>
             </div>
           </CardContent>
@@ -285,7 +286,7 @@ export default function ScoreDetailPage() {
       )}
 
       {/* Transitive Impact Graph */}
-      {(score.hotspots ?? []).length > 0 && score.head_commit && (
+      {(score.hotspots ?? []).length > 0 && score.head_snapshot_id && (
         <Card className="mb-8">
           <CardHeader>
             <div className="flex items-center justify-between">

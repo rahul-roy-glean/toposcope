@@ -79,14 +79,16 @@ export interface ScoreResult {
   id?: string;
   total_score: number;
   grade: string;
+  commit_sha: string;
   breakdown: MetricResult[];
   hotspots: Hotspot[];
   suggested_actions: SuggestedAction[];
-  delta_stats: DeltaStats;
-  base_commit: string;
-  head_commit: string;
+  delta_stats?: DeltaStats;
+  base_snapshot_id: string;
+  head_snapshot_id: string;
+  delta_id: string;
   pr_number?: number;
-  analyzed_at?: string;
+  created_at?: string;
 }
 
 export interface Repository {
