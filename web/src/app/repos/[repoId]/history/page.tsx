@@ -13,6 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -41,6 +42,13 @@ const METRIC_NAMES: Record<string, string> = {
 const PAGE_SIZE = 25;
 const GITHUB_BASE = "https://github.com/askscio/scio/commit";
 
+// Compute the 95th percentile for Y-axis capping
+function percentile(values: number[], p: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, idx)] ?? 0;
+}
+
 export default function ScoreHistoryPage() {
   const params = useParams<{ repoId: string }>();
   const [history, setHistory] = useState<ScoreHistory[]>([]);
@@ -58,7 +66,44 @@ export default function ScoreHistoryPage() {
     load();
   }, [params.repoId]);
 
-  // Filtered + reversed (newest first)
+  // Check if dates are all the same (needs commit-based X-axis)
+  const allSameDate = useMemo(() => {
+    if (history.length < 2) return false;
+    return history.every((h) => h.date === history[0].date);
+  }, [history]);
+
+  // Prepare chart data with an index and short SHA for X-axis
+  const chartData = useMemo(() => {
+    return history.map((h, i) => ({
+      ...h,
+      index: i,
+      label: allSameDate
+        ? (h.commit_sha ?? "").slice(0, 6)
+        : h.date.slice(5), // MM-DD
+    }));
+  }, [history, allSameDate]);
+
+  // Y-axis domain: cap at 95th percentile to handle outliers
+  const scoreYMax = useMemo(() => {
+    const scores = history.map((h) => h.total_score).filter((s) => s > 0);
+    if (scores.length === 0) return 100;
+    const p95 = percentile(scores, 95);
+    return Math.ceil(p95 * 1.2); // 20% headroom
+  }, [history]);
+
+  const metricYMax = useMemo(() => {
+    const values: number[] = [];
+    for (const h of history) {
+      for (const v of Object.values(h.metrics)) {
+        values.push(Math.abs(v));
+      }
+    }
+    if (values.length === 0) return 10;
+    const p95 = percentile(values, 95);
+    return Math.ceil(p95 * 1.2);
+  }, [history]);
+
+  // Filtered + reversed (newest first) for table
   const filtered = useMemo(() => {
     const reversed = [...history].reverse();
     if (!gradeFilter) return reversed;
@@ -92,20 +137,23 @@ export default function ScoreHistoryPage() {
   }
 
   // Transform data for the stacked area chart (make contributions absolute)
-  const metricData = history.map((h) => {
-    const entry: Record<string, number | string> = { date: h.date };
+  const metricData = chartData.map((h) => {
+    const entry: Record<string, number | string> = { label: h.label, index: h.index };
     for (const [key, value] of Object.entries(h.metrics)) {
       entry[key] = Math.abs(value);
     }
     return entry;
   });
 
+  // Reduce tick count for X-axis
+  const tickInterval = Math.max(0, Math.floor(chartData.length / 15));
+
   return (
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Score History</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Health score trends over time
+          Default branch health scores over time ({history.length} entries)
         </p>
       </div>
 
@@ -116,33 +164,44 @@ export default function ScoreHistoryPage() {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={history}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
               <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: "#a1a1aa" }}
-                tickFormatter={(v: string) => v.slice(5)}
+                dataKey="label"
+                tick={{ fontSize: 10, fill: "#a1a1aa" }}
+                interval={tickInterval}
+                angle={allSameDate ? -45 : 0}
+                textAnchor={allSameDate ? "end" : "middle"}
+                height={allSameDate ? 50 : 30}
               />
               <YAxis
-                domain={[0, 100]}
+                domain={[0, scoreYMax]}
                 tick={{ fontSize: 11, fill: "#a1a1aa" }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e4e4e7",
+                  backgroundColor: "#18181b",
+                  border: "1px solid #3f3f46",
                   borderRadius: "8px",
                   fontSize: "12px",
+                  color: "#e4e4e7",
+                }}
+                labelFormatter={(_, payload) => {
+                  const item = payload?.[0]?.payload;
+                  return item?.commit_sha
+                    ? `Commit: ${item.commit_sha.slice(0, 8)} (${item.date})`
+                    : item?.date ?? "";
                 }}
                 formatter={(value) => [String(value ?? 0), "Score"]}
               />
+              <ReferenceLine y={0} stroke="#3f3f46" />
               <Line
                 type="monotone"
                 dataKey="total_score"
                 stroke="#10b981"
                 strokeWidth={2}
-                dot={{ r: 3, fill: "#10b981" }}
-                activeDot={{ r: 5 }}
+                dot={{ r: 2, fill: "#10b981" }}
+                activeDot={{ r: 4 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -157,19 +216,26 @@ export default function ScoreHistoryPage() {
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={metricData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
               <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: "#a1a1aa" }}
-                tickFormatter={(v: string) => v.slice(5)}
+                dataKey="label"
+                tick={{ fontSize: 10, fill: "#a1a1aa" }}
+                interval={tickInterval}
+                angle={allSameDate ? -45 : 0}
+                textAnchor={allSameDate ? "end" : "middle"}
+                height={allSameDate ? 50 : 30}
               />
-              <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} />
+              <YAxis
+                domain={[0, metricYMax]}
+                tick={{ fontSize: 11, fill: "#a1a1aa" }}
+              />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e4e4e7",
+                  backgroundColor: "#18181b",
+                  border: "1px solid #3f3f46",
                   borderRadius: "8px",
                   fontSize: "12px",
+                  color: "#e4e4e7",
                 }}
               />
               <Legend
