@@ -81,10 +81,11 @@ func main() {
 	}
 	defer db.Close()
 
-	// Run migrations if requested
+	// Run migrations if requested (before defer db.Close() takes effect)
 	if cfg.AutoMigrate || cfg.MigrateOnly {
 		log.Println("running database migrations...")
 		if err := platform.AutoMigrate(db); err != nil {
+			db.Close()
 			log.Fatalf("auto-migrate: %v", err)
 		}
 		log.Println("migrations complete")

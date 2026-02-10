@@ -388,7 +388,7 @@ func (s *Service) DeleteRepo(ctx context.Context, repoID string) error {
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete in FK dependency order
 	queries := []string{

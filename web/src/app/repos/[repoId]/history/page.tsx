@@ -123,10 +123,10 @@ export default function ScoreHistoryPage() {
     return ["A", "B", "C", "D", "F"].filter((g) => grades.has(g));
   }, [history]);
 
-  // Reset page when filter changes
-  useEffect(() => {
+  const setGradeFilterAndResetPage = (g: string | null) => {
+    setGradeFilter(g);
     setPage(0);
-  }, [gradeFilter]);
+  };
 
   if (loading) {
     return (
@@ -267,7 +267,7 @@ export default function ScoreHistoryPage() {
               {/* Grade Filter */}
               <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
-                  onClick={() => setGradeFilter(null)}
+                  onClick={() => setGradeFilterAndResetPage(null)}
                   className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
                     gradeFilter === null
                       ? "bg-zinc-200 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-100"
@@ -279,7 +279,7 @@ export default function ScoreHistoryPage() {
                 {availableGrades.map((g) => (
                   <button
                     key={g}
-                    onClick={() => setGradeFilter(gradeFilter === g ? null : g)}
+                    onClick={() => setGradeFilterAndResetPage(gradeFilter === g ? null : g)}
                     className={`px-2 py-1 transition-colors rounded ${
                       gradeFilter === g
                         ? "bg-zinc-200 dark:bg-zinc-700"
