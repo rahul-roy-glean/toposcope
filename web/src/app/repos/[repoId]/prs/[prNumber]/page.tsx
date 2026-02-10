@@ -87,7 +87,7 @@ export default function PRImpactPage() {
               <Target className="h-4 w-4 text-sky-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.impacted_targets}
+                  {score.delta_stats?.impacted_targets}
                 </p>
                 <p className="text-[10px] text-zinc-500">Impacted Targets</p>
               </div>
@@ -101,7 +101,7 @@ export default function PRImpactPage() {
               <Plus className="h-4 w-4 text-emerald-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.added_nodes}
+                  {score.delta_stats?.added_nodes}
                 </p>
                 <p className="text-[10px] text-zinc-500">Nodes Added</p>
               </div>
@@ -115,7 +115,7 @@ export default function PRImpactPage() {
               <Minus className="h-4 w-4 text-red-500" />
               <div>
                 <p className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {score.delta_stats.removed_nodes}
+                  {score.delta_stats?.removed_nodes}
                 </p>
                 <p className="text-[10px] text-zinc-500">Nodes Removed</p>
               </div>
@@ -128,11 +128,11 @@ export default function PRImpactPage() {
             <div className="space-y-1">
               <div className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                 <Plus className="h-3 w-3 text-emerald-500" />
-                {score.delta_stats.added_edges} edges
+                {score.delta_stats?.added_edges} edges
               </div>
               <div className="flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                 <Minus className="h-3 w-3 text-red-500" />
-                {score.delta_stats.removed_edges} edges
+                {score.delta_stats?.removed_edges} edges
               </div>
             </div>
           </CardContent>

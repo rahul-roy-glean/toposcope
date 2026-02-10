@@ -177,8 +177,8 @@ export default function DashboardPage() {
                       {repo.full_name} #{score.pr_number}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      {score.delta_stats.impacted_targets} targets impacted |{" "}
-                      +{score.delta_stats.added_nodes} / -{score.delta_stats.removed_nodes} nodes
+                      {score.delta_stats?.impacted_targets ?? 0} targets impacted |{" "}
+                      +{score.delta_stats?.added_nodes ?? 0} / -{score.delta_stats?.removed_nodes ?? 0} nodes
                     </p>
                   </div>
                   <span className="font-mono text-sm font-semibold text-zinc-700 dark:text-zinc-300">
