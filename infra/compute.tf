@@ -2,8 +2,11 @@ resource "google_cloud_run_v2_service" "main" {
   name     = "${local.service_name}-service"
   location = var.region
 
+  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+
   template {
     service_account = google_service_account.service.email
+    timeout         = "300s"
 
     scaling {
       min_instance_count = local.env == "prod" ? 1 : 0
@@ -16,23 +19,16 @@ resource "google_cloud_run_v2_service" "main" {
     }
 
     containers {
-      image = var.container_image
+      image   = var.container_image
+      command = ["toposcoped"]
 
       ports {
         container_port = 8080
       }
 
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-      env {
         name  = "ENVIRONMENT"
         value = local.env
-      }
-      env {
-        name  = "PROJECT_ID"
-        value = var.project_id
       }
       env {
         name  = "DATABASE_URL"
@@ -43,40 +39,22 @@ resource "google_cloud_run_v2_service" "main" {
         value = google_storage_bucket.data.name
       }
       env {
-        name  = "GITHUB_APP_ID"
-        value = var.github_app_id
+        name  = "API_KEY"
+        value = var.api_key
       }
       env {
-        name = "GITHUB_PRIVATE_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.github_private_key.id
-            version = "latest"
-          }
-        }
+        name  = "SNAPSHOT_CACHE_SIZE"
+        value = "20"
       }
       env {
-        name = "GITHUB_WEBHOOK_SECRET"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.github_webhook_secret.id
-            version = "latest"
-          }
-        }
-      }
-      env {
-        name  = "CLOUD_TASKS_QUEUE"
-        value = google_cloud_tasks_queue.ingestion.id
-      }
-      env {
-        name  = "EXTRACTION_WORKER_IMAGE"
-        value = var.extraction_worker_image
+        name  = "LOCAL_STORAGE_PATH"
+        value = "/tmp/toposcope-data"
       }
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "512Mi"
+          cpu    = "2"
+          memory = "2Gi"
         }
       }
 
@@ -98,12 +76,4 @@ resource "google_cloud_run_v2_service" "main" {
   }
 
   labels = local.labels
-}
-
-# Allow unauthenticated access (GitHub webhooks)
-resource "google_cloud_run_v2_service_iam_member" "public" {
-  name     = google_cloud_run_v2_service.main.name
-  location = google_cloud_run_v2_service.main.location
-  role     = "roles/run.invoker"
-  member   = "allUsers"
 }

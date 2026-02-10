@@ -148,10 +148,14 @@ func runScore(ctx context.Context, opts scoreOpts) error {
 	baseSnap, _ := loadCachedSnapshot(wsRoot, baseSHA)
 	headSnap, _ := loadCachedSnapshot(wsRoot, headSHA)
 
-	// Record current HEAD so we can restore after checkout
-	origRef, err := gitRevParse(ctx, wsRoot, "HEAD")
+	// Record current HEAD so we can restore after checkout.
+	// Prefer symbolic ref (branch name) over SHA to avoid detached HEAD.
+	origRef, err := gitSymbolicRef(ctx, wsRoot)
 	if err != nil {
-		return fmt.Errorf("getting current HEAD: %w", err)
+		origRef, err = gitRevParse(ctx, wsRoot, "HEAD")
+		if err != nil {
+			return fmt.Errorf("getting current HEAD: %w", err)
+		}
 	}
 
 	// Check if working tree is dirty

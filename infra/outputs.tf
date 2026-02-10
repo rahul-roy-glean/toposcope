@@ -24,17 +24,22 @@ output "service_account_email" {
   value       = google_service_account.service.email
 }
 
-output "extraction_service_account_email" {
-  description = "Service account email for extraction workers"
-  value       = google_service_account.extraction.email
-}
-
-output "cloud_tasks_queue" {
-  description = "Cloud Tasks queue ID"
-  value       = google_cloud_tasks_queue.ingestion.id
-}
-
 output "vpc_connector" {
   description = "VPC connector name"
   value       = google_vpc_access_connector.main.name
+}
+
+output "ci_service_account_email" {
+  description = "CI service account email (for GitHub Actions)"
+  value       = google_service_account.ci.email
+}
+
+output "lb_ip_address" {
+  description = "Static IP address for the load balancer. Create a DNS A record pointing your domain here."
+  value       = google_compute_global_address.lb.address
+}
+
+output "workload_identity_provider" {
+  description = "WIF provider resource name (for GitHub Actions auth)"
+  value       = google_iam_workload_identity_pool_provider.github.name
 }

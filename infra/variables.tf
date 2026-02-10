@@ -27,25 +27,38 @@ variable "db_password" {
   sensitive   = true
 }
 
-variable "github_app_id" {
-  description = "GitHub App ID"
+variable "api_key" {
+  description = "API key for authenticating ingest requests. Leave empty to disable auth."
   type        = string
-}
-
-variable "github_webhook_secret" {
-  description = "GitHub webhook secret for HMAC verification"
-  type        = string
+  default     = ""
   sensitive   = true
 }
 
 variable "container_image" {
   description = "Container image for the Cloud Run service"
   type        = string
-  default     = "gcr.io/toposcope/toposcoped:latest"
+  default     = "us-central1-docker.pkg.dev/scio-ci/glean-images/toposcoped:v0.2.2"
 }
 
-variable "extraction_worker_image" {
-  description = "Container image for the extraction worker"
+variable "domain" {
+  description = "Domain for the toposcope service (e.g., toposcope.internal.glean.com)"
   type        = string
-  default     = "gcr.io/toposcope/extraction-worker:latest"
+  default     = "toposcope.internal.glean.com"
+}
+
+variable "iap_oauth_client_id" {
+  description = "OAuth client ID for IAP"
+  type        = string
+}
+
+variable "iap_oauth_client_secret" {
+  description = "OAuth client secret for IAP"
+  type        = string
+  sensitive   = true
+}
+
+variable "github_repo" {
+  description = "GitHub repo allowed to authenticate via WIF (e.g. 'glean/mono')"
+  type        = string
+  default     = "askscio/scio"
 }

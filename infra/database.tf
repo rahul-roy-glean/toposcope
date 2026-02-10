@@ -3,7 +3,10 @@ resource "google_sql_database_instance" "main" {
   database_version = "POSTGRES_15"
   region           = var.region
 
-  depends_on = [google_service_networking_connection.private_vpc]
+  depends_on = [
+    google_service_networking_connection.private_vpc,
+    google_project_service.sqladmin,
+  ]
 
   settings {
     tier              = var.db_tier

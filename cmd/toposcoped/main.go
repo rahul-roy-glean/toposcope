@@ -87,6 +87,7 @@ func main() {
 	mux.Handle("POST /v1/webhooks/github", webhookHandler)
 	mux.HandleFunc("POST /internal/process", processHandler(ingestionSvc))
 	mux.HandleFunc("GET /healthz", healthHandler(db))
+	mux.HandleFunc("GET /health", healthHandler(db))
 
 	// Register API routes
 	apiHandler.RegisterRoutes(mux)

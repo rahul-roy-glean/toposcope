@@ -1,0 +1,117 @@
+# .github/workflows/toposcope-ingest.yml
+# Place this in the TARGET REPO (e.g., glean/mono), not in the toposcope repo.
+#
+# Runs toposcope score on every push to main and posts results to the
+# hosted toposcoped service on Cloud Run.
+#
+# Required setup:
+#   1. terraform apply the infra/ in the toposcope repo (creates WIF pool + CI SA)
+#   2. Copy the terraform outputs into this workflow:
+#      - workload_identity_provider -> WIF_PROVIDER
+#      - ci_service_account_email   -> CI_SERVICE_ACCOUNT
+#      - service_url                -> TOPOSCOPE_URL
+#   3. Set the TOPOSCOPE_API_KEY secret in the target repo's GitHub settings
+
+name: Toposcope Ingest
+
+on:
+  push:
+    branches: [main, master]
+
+# WIF requires id-token permission
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # --- Fill these from `terraform output` ---
+  WIF_PROVIDER: "projects/1064261985858/locations/global/workloadIdentityPools/toposcope-github/providers/github-actions"
+  CI_SERVICE_ACCOUNT: "toposcope-ci@scio-ci.iam.gserviceaccount.com"
+  TOPOSCOPE_URL: "https://toposcope-service-bqbgmvspcq-uc.a.run.app"
+  TOPOSCOPE_VERSION: "v0.2.1"
+
+jobs:
+  toposcope:
+    runs-on: ubuntu-latest  # or your self-hosted runner with bazel
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need HEAD~1 for base comparison
+
+      - name: Authenticate to GCP
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.CI_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ env.TOPOSCOPE_URL }}
+
+      - name: Install toposcope
+        run: |
+          curl -sL "https://github.com/rahul-roy-glean/toposcope/releases/download/${TOPOSCOPE_VERSION}/toposcope_linux_amd64.tar.gz" | tar xz
+          chmod +x toposcope
+          echo "$PWD" >> "$GITHUB_PATH"
+
+      - name: Run toposcope score
+        run: |
+          toposcope score \
+            --base HEAD~1 \
+            --head HEAD \
+            --bazel-path "$(which bazel)" \
+            --output json > /tmp/score.json
+
+      - name: Post results to toposcoped
+        run: |
+          BASE_SHA=$(git rev-parse HEAD~1)
+          HEAD_SHA=$(git rev-parse HEAD)
+          REPO_NAME="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+
+          # Find cached snapshots
+          CACHE_DIR="$HOME/.cache/toposcope"
+          SNAP_DIR=$(find "$CACHE_DIR" -type d -name snapshots | head -1)
+
+          if [ -z "$SNAP_DIR" ]; then
+            echo "Error: snapshot cache directory not found"
+            exit 1
+          fi
+
+          # Build ingest payload
+          jq -n \
+            --arg repo "$REPO_NAME" \
+            --arg branch "$BRANCH" \
+            --arg sha "$HEAD_SHA" \
+            --slurpfile head "$SNAP_DIR/$HEAD_SHA.json" \
+            --slurpfile base "$SNAP_DIR/$BASE_SHA.json" \
+            --slurpfile score /tmp/score.json \
+            '{
+              repo_full_name: $repo,
+              default_branch: $branch,
+              commit_sha: $sha,
+              branch: $branch,
+              snapshot: $head[0],
+              base_snapshot: $base[0],
+              score: $score[0]
+            }' > /tmp/ingest.json
+
+          echo "Payload size: $(wc -c < /tmp/ingest.json) bytes"
+
+          # POST to toposcoped with GCP identity token + API key
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST "${TOPOSCOPE_URL}/api/v1/ingest" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.id_token }}" \
+            -H "X-API-Key: ${{ secrets.TOPOSCOPE_API_KEY }}" \
+            -d @/tmp/ingest.json)
+
+          echo "Response ($HTTP_CODE):"
+          cat /tmp/response.json
+
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "Error: ingest failed with HTTP $HTTP_CODE"
+            exit 1
+          fi

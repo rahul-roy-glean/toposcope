@@ -145,6 +145,16 @@ func resolveWorkspace(repoPath string) (string, error) {
 	return config.FindWorkspaceRoot(cwd)
 }
 
+func gitSymbolicRef(ctx context.Context, dir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", "--short", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func gitRevParse(ctx context.Context, dir, ref string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", ref)
 	cmd.Dir = dir

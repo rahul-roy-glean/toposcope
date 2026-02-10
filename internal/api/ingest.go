@@ -1,8 +1,10 @@
 package api
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -30,8 +32,20 @@ type ingestResponse struct {
 }
 
 func (h *Handler) handleIngest(w http.ResponseWriter, r *http.Request) {
+	// Support gzip-compressed request bodies
+	var body io.Reader = r.Body
+	if r.Header.Get("Content-Encoding") == "gzip" {
+		gz, err := gzip.NewReader(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid gzip body: "+err.Error())
+			return
+		}
+		defer gz.Close()
+		body = gz
+	}
+
 	var req ingestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}

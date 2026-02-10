@@ -5,13 +5,6 @@ resource "google_service_account" "service" {
   description  = "Service account for the toposcoped Cloud Run service"
 }
 
-# Service account for extraction workers
-resource "google_service_account" "extraction" {
-  account_id   = "${local.service_name}-extraction"
-  display_name = "Toposcope Extraction Worker"
-  description  = "Service account for Cloud Batch extraction jobs"
-}
-
 # Service account can access Cloud SQL
 resource "google_project_iam_member" "service_cloudsql" {
   project = var.project_id
@@ -26,43 +19,51 @@ resource "google_storage_bucket_iam_member" "service_storage" {
   member = "serviceAccount:${google_service_account.service.email}"
 }
 
-# Service account can access secrets
-resource "google_secret_manager_secret_iam_member" "service_github_key" {
-  secret_id = google_secret_manager_secret.github_private_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.service.email}"
+# --- CI service account (used by GitHub Actions via WIF) ---
+
+resource "google_service_account" "ci" {
+  account_id   = "${local.service_name}-ci"
+  display_name = "Toposcope CI"
+  description  = "Service account for GitHub Actions to call toposcoped"
 }
 
-resource "google_secret_manager_secret_iam_member" "service_webhook_secret" {
-  secret_id = google_secret_manager_secret.github_webhook_secret.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.service.email}"
+# CI SA can invoke the Cloud Run service
+resource "google_cloud_run_v2_service_iam_member" "ci_invoker" {
+  name     = google_cloud_run_v2_service.main.name
+  location = google_cloud_run_v2_service.main.location
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.ci.email}"
 }
 
-# Service account can enqueue Cloud Tasks
-resource "google_project_iam_member" "service_tasks" {
-  project = var.project_id
-  role    = "roles/cloudtasks.enqueuer"
-  member  = "serviceAccount:${google_service_account.service.email}"
+# --- Workload Identity Federation ---
+
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "${local.service_name}-github"
+  display_name              = "Toposcope GitHub Actions"
+  description               = "WIF pool for GitHub Actions"
 }
 
-# Service account can submit Cloud Batch jobs
-resource "google_project_iam_member" "service_batch" {
-  project = var.project_id
-  role    = "roles/batch.jobsEditor"
-  member  = "serviceAccount:${google_service_account.service.email}"
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "github-actions"
+  display_name                       = "GitHub Actions"
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.repository" = "assertion.repository"
+  }
+
+  attribute_condition = "assertion.repository == \"${var.github_repo}\""
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
 }
 
-# Extraction worker can read/write GCS bucket
-resource "google_storage_bucket_iam_member" "extraction_storage" {
-  bucket = google_storage_bucket.data.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.extraction.email}"
-}
-
-# Extraction worker can pull container images
-resource "google_project_iam_member" "extraction_artifacts" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${google_service_account.extraction.email}"
+# Allow the GitHub repo to impersonate the CI service account
+resource "google_service_account_iam_member" "ci_wif" {
+  service_account_id = google_service_account.ci.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }
