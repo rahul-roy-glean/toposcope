@@ -92,10 +92,10 @@ func main() {
 	// Register API routes
 	apiHandler.RegisterRoutes(mux)
 
-	// Apply CORS middleware globally, API key auth selectively to /api/ routes
+	// Apply CORS middleware globally, API key auth only on write endpoints
 	authMiddleware := api.APIKeyAuth(cfg.APIKey)
 	handler := api.CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/") {
 			authMiddleware(mux).ServeHTTP(w, r)
 			return
 		}
