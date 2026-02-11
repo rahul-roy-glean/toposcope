@@ -37,6 +37,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Write endpoints (auth-protected)
 	mux.HandleFunc("POST /api/v1/ingest", h.handleIngest)
 	mux.HandleFunc("POST /api/v1/snapshots", h.handleUploadSnapshot)
+	mux.HandleFunc("POST /api/v1/rescore", h.handleRescore)
 	mux.HandleFunc("PATCH /api/repos/{repoID}", h.handleUpdateRepo)
 	mux.HandleFunc("DELETE /api/repos/{repoID}", h.handleDeleteRepo)
 

@@ -107,3 +107,63 @@ func TestBlastRadiusMetric_EmptyDelta(t *testing.T) {
 		t.Errorf("expected zero contribution for empty delta, got %f", result.Contribution)
 	}
 }
+
+func TestBlastRadiusMetric_TestNodeDiscount(t *testing.T) {
+	// Test nodes should contribute at 0.3x their in-degree
+	base := &graph.Snapshot{
+		Nodes: map[string]*graph.Node{
+			"//app:lib":  {Key: "//app:lib", Package: "//app"},
+			"//app:test": {Key: "//app:test", Package: "//app", IsTest: true},
+		},
+		Edges: []graph.Edge{
+			// //app:lib has in-degree 0
+			// //app:test has in-degree 0
+		},
+	}
+
+	// Give them in-degrees via other nodes depending on them
+	for i := 0; i < 10; i++ {
+		key := "//dep" + string(rune('a'+i)) + ":lib"
+		base.Nodes[key] = &graph.Node{Key: key, Package: "//dep"}
+		base.Edges = append(base.Edges, graph.Edge{From: key, To: "//app:lib", Type: "COMPILE"})
+	}
+	for i := 0; i < 20; i++ {
+		key := "//tdep" + string(rune('a'+i)) + ":lib"
+		base.Nodes[key] = &graph.Node{Key: key, Package: "//tdep"}
+		base.Edges = append(base.Edges, graph.Edge{From: key, To: "//app:test", Type: "COMPILE"})
+	}
+
+	head := &graph.Snapshot{
+		Nodes: map[string]*graph.Node{
+			"//app:lib":  {Key: "//app:lib", Package: "//app"},
+			"//app:test": {Key: "//app:test", Package: "//app", IsTest: true},
+		},
+	}
+	delta := &graph.Delta{
+		AddedEdges: []graph.Edge{
+			{From: "//app:lib", To: "//app:test", Type: "COMPILE"},
+		},
+	}
+
+	m := &scoring.BlastRadiusMetric{
+		Weight:          2.0,
+		MaxContribution: 15.0,
+	}
+
+	result := m.Evaluate(delta, base, head)
+
+	// Affected: //app:lib (in-degree=10, prod -> weight 1.0) + //app:test (in-degree=20, test -> weight 0.3)
+	// blastRadius = 10*1.0 + 20*0.3 = 10 + 6 = 16
+	expectedBlast := 10.0*1.0 + 20.0*0.3
+	expected := 2.0 * math.Log2(1+expectedBlast)
+	if math.Abs(result.Contribution-expected) > 0.01 {
+		t.Errorf("expected contribution ~%f, got %f", expected, result.Contribution)
+	}
+
+	// Compare with what it would be without discounting (should be higher)
+	nodiscountBlast := 10.0 + 20.0
+	noDiscount := 2.0 * math.Log2(1+nodiscountBlast)
+	if result.Contribution >= noDiscount {
+		t.Errorf("test discount should reduce contribution: got %f, undiscounted would be %f", result.Contribution, noDiscount)
+	}
+}

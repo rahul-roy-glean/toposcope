@@ -81,12 +81,12 @@ func main() {
 	}
 	defer db.Close()
 
-	// Run migrations if requested (before defer db.Close() takes effect)
+	// Run migrations if requested
 	if cfg.AutoMigrate || cfg.MigrateOnly {
 		log.Println("running database migrations...")
 		if err := platform.AutoMigrate(db); err != nil {
-			db.Close()
-			log.Fatalf("auto-migrate: %v", err)
+			log.Printf("FATAL: auto-migrate: %v", err)
+			return
 		}
 		log.Println("migrations complete")
 		if cfg.MigrateOnly {
@@ -98,7 +98,8 @@ func main() {
 	// Initialize storage backend
 	storage, err := initStorage(context.Background(), cfg)
 	if err != nil {
-		log.Fatalf("init storage: %v", err)
+		log.Printf("FATAL: init storage: %v", err)
+		return
 	}
 
 	// Initialize services

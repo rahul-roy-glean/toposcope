@@ -49,8 +49,9 @@ func (m *BlastRadiusMetric) Evaluate(delta *graph.Delta, base, head *graph.Snaps
 
 	baseInDeg := base.ComputeInDegrees()
 
-	// Sum in-degrees of affected nodes from base
-	blastRadius := 0
+	// Sum in-degrees of affected nodes from base.
+	// Test nodes contribute at a discounted rate (0.3x).
+	var blastRadius float64
 	type nodeWithDeg struct {
 		key    string
 		degree int
@@ -59,11 +60,19 @@ func (m *BlastRadiusMetric) Evaluate(delta *graph.Delta, base, head *graph.Snaps
 
 	for key := range affected {
 		deg := baseInDeg[key]
-		blastRadius += deg
+		weight := 1.0
+		if node := base.Nodes[key]; node != nil && node.IsTest {
+			weight = 0.3
+		} else if node == nil {
+			if headNode := head.Nodes[key]; headNode != nil && headNode.IsTest {
+				weight = 0.3
+			}
+		}
+		blastRadius += float64(deg) * weight
 		nodeDegs = append(nodeDegs, nodeWithDeg{key: key, degree: deg})
 	}
 
-	contribution := m.Weight * math.Log2(1+float64(blastRadius))
+	contribution := m.Weight * math.Log2(1+blastRadius)
 	if contribution > m.MaxContribution {
 		contribution = m.MaxContribution
 	}

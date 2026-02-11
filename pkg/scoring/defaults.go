@@ -14,8 +14,9 @@ func DefaultMetrics() []Metric {
 			MinThreshold: w.FanoutMinThreshold,
 		},
 		&CentralityMetric{
-			Weight:      w.CentralityWeight,
-			MinInDegree: w.CentralityMinInDegree,
+			Weight:          w.CentralityWeight,
+			MinInDegree:     w.CentralityMinInDegree,
+			MaxContribution: w.CentralityMaxContribution,
 		},
 		&BlastRadiusMetric{
 			Weight:          w.BlastRadiusWeight,

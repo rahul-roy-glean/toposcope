@@ -12,8 +12,9 @@ type DefaultWeights struct {
 	FanoutMinThreshold int // only score if out-degree exceeds this after change
 
 	// M3: Centrality penalty
-	CentralityWeight      float64
-	CentralityMinInDegree int // only apply for targets above this in-degree
+	CentralityWeight          float64
+	CentralityMinInDegree     int     // only apply for targets above this in-degree
+	CentralityMaxContribution float64 // safety cap on centrality contribution
 
 	// M5: Blast radius
 	BlastRadiusWeight          float64
@@ -39,8 +40,9 @@ func Defaults() DefaultWeights {
 		FanoutMinThreshold: 10,
 
 		// M3
-		CentralityWeight:      0.7,
-		CentralityMinInDegree: 50,
+		CentralityWeight:          0.7,
+		CentralityMinInDegree:     50,
+		CentralityMaxContribution: 40.0,
 
 		// M5
 		BlastRadiusWeight:          2.0,
@@ -48,8 +50,8 @@ func Defaults() DefaultWeights {
 
 		// M6
 		CreditPerRemovedCrossBoundaryEdge: -0.5,
-		CreditMaxTotal:                    -5.0,
+		CreditMaxTotal:                    -15.0,
 		CreditPerFanoutReduction:          -0.3,
-		CreditFanoutMaxTotal:              -3.0,
+		CreditFanoutMaxTotal:              -10.0,
 	}
 }

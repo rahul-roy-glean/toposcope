@@ -162,7 +162,19 @@ func generateSuggestions(breakdown []MetricResult, delta *graph.Delta) []Suggest
 			}
 		case "centrality_penalty":
 			for _, ev := range mr.Evidence {
-				if ev.To != "" && ev.Value >= 100 {
+				if ev.To == "" {
+					continue
+				}
+				if ev.Value >= 1000 {
+					// Foundational package — don't suggest avoiding it
+					actions = append(actions, SuggestedAction{
+						Title:       fmt.Sprintf("This change depends on foundational package %s (%.0f reverse deps)", ev.To, ev.Value),
+						Description: "This is a foundational target; depending on it is expected. No action needed unless a narrower API exists.",
+						Targets:     []string{ev.To},
+						Confidence:  0.3,
+						Addresses:   []string{mr.Key},
+					})
+				} else if ev.Value >= 100 {
 					actions = append(actions, SuggestedAction{
 						Title:       fmt.Sprintf("Avoid direct dependency on %s", ev.To),
 						Description: fmt.Sprintf("This target has %.0f reverse dependencies. Consider depending on a narrower interface.", ev.Value),

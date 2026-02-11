@@ -30,9 +30,9 @@ func TestCreditsMetric_RemovedCrossBoundaryEdge(t *testing.T) {
 
 	m := &scoring.CreditsMetric{
 		PerRemovedCrossBoundaryEdge: -0.5,
-		MaxCreditTotal:              -5.0,
+		MaxCreditTotal:              -15.0,
 		PerFanoutReduction:          -0.3,
-		FanoutMaxCredit:             -3.0,
+		FanoutMaxCredit:             -10.0,
 	}
 
 	result := m.Evaluate(delta, base, head)
@@ -68,9 +68,9 @@ func TestCreditsMetric_AntiGaming(t *testing.T) {
 
 	m := &scoring.CreditsMetric{
 		PerRemovedCrossBoundaryEdge: -0.5,
-		MaxCreditTotal:              -5.0,
+		MaxCreditTotal:              -15.0,
 		PerFanoutReduction:          -0.3,
-		FanoutMaxCredit:             -3.0,
+		FanoutMaxCredit:             -10.0,
 	}
 
 	result := m.Evaluate(delta, base, head)
@@ -106,9 +106,9 @@ func TestCreditsMetric_FanoutReduction(t *testing.T) {
 
 	m := &scoring.CreditsMetric{
 		PerRemovedCrossBoundaryEdge: -0.5,
-		MaxCreditTotal:              -5.0,
+		MaxCreditTotal:              -15.0,
 		PerFanoutReduction:          -0.3,
-		FanoutMaxCredit:             -3.0,
+		FanoutMaxCredit:             -10.0,
 	}
 
 	result := m.Evaluate(delta, base, head)
@@ -141,9 +141,9 @@ func TestCreditsMetric_SameBoundaryNoEdgeCredit(t *testing.T) {
 
 	m := &scoring.CreditsMetric{
 		PerRemovedCrossBoundaryEdge: -0.5,
-		MaxCreditTotal:              -5.0,
+		MaxCreditTotal:              -15.0,
 		PerFanoutReduction:          -0.3,
-		FanoutMaxCredit:             -3.0,
+		FanoutMaxCredit:             -10.0,
 	}
 
 	result := m.Evaluate(delta, base, head)

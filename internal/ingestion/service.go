@@ -359,6 +359,34 @@ func (s *Service) StoreScore(ctx context.Context, req IngestionRequest, baseSnap
 	return id, nil
 }
 
+// UpdateScore updates an existing score row in-place with new scoring results.
+func (s *Service) UpdateScore(ctx context.Context, scoreID string, result *scoring.ScoreResult) error {
+	breakdownJSON, err := json.Marshal(result.Breakdown)
+	if err != nil {
+		return fmt.Errorf("marshal breakdown: %w", err)
+	}
+	hotspotsJSON, err := json.Marshal(result.Hotspots)
+	if err != nil {
+		return fmt.Errorf("marshal hotspots: %w", err)
+	}
+	actionsJSON, err := json.Marshal(result.SuggestedActions)
+	if err != nil {
+		return fmt.Errorf("marshal suggested actions: %w", err)
+	}
+
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE scores SET total_score = $1, grade = $2, breakdown = $3, hotspots = $4, suggested_actions = $5
+		 WHERE id = $6`,
+		result.TotalScore, result.Grade,
+		breakdownJSON, hotspotsJSON, actionsJSON,
+		scoreID,
+	)
+	if err != nil {
+		return fmt.Errorf("update score row: %w", err)
+	}
+	return nil
+}
+
 // computeDelta calculates the structural difference between two snapshots.
 func computeDelta(base, head *graph.Snapshot) *graph.Delta {
 	delta := &graph.Delta{}

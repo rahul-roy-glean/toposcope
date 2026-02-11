@@ -9,8 +9,9 @@ import (
 
 // CentralityMetric (M3) penalizes adding dependencies on highly-depended-upon targets.
 type CentralityMetric struct {
-	Weight      float64 // score multiplier
-	MinInDegree int     // only apply for targets above this in-degree in base
+	Weight          float64 // score multiplier
+	MinInDegree     int     // only apply for targets above this in-degree in base
+	MaxContribution float64 // safety cap on total contribution (0 = no cap)
 }
 
 func (m *CentralityMetric) Key() string  { return "centrality_penalty" }
@@ -35,10 +36,29 @@ func (m *CentralityMetric) Evaluate(delta *graph.Delta, base, head *graph.Snapsh
 
 	baseInDeg := base.ComputeInDegrees()
 
-	var contribution float64
+	// Group added edges by destination, skipping test sources.
+	// This deduplicates: if 12 edges all point to //core, we score //core once.
+	type destInfo struct {
+		sourceCount int
+	}
+	destMap := make(map[string]*destInfo)
 
 	for _, edge := range delta.AddedEdges {
-		targetInDegree := baseInDeg[edge.To]
+		// Skip edges where the source node is a test target
+		if srcNode := head.Nodes[edge.From]; srcNode != nil && srcNode.IsTest {
+			continue
+		}
+
+		if _, ok := destMap[edge.To]; !ok {
+			destMap[edge.To] = &destInfo{}
+		}
+		destMap[edge.To].sourceCount++
+	}
+
+	var contribution float64
+
+	for dest, info := range destMap {
+		targetInDegree := baseInDeg[dest]
 		if targetInDegree < m.MinInDegree {
 			continue
 		}
@@ -46,12 +66,20 @@ func (m *CentralityMetric) Evaluate(delta *graph.Delta, base, head *graph.Snapsh
 		c := m.Weight * math.Log2(1+float64(targetInDegree))
 		contribution += c
 
+		summary := fmt.Sprintf("New dep on %s (in-degree %d in base)", dest, targetInDegree)
+		if info.sourceCount > 1 {
+			summary = fmt.Sprintf("New dep on %s (in-degree %d in base, %d sources)", dest, targetInDegree, info.sourceCount)
+		}
 		result.Evidence = append(result.Evidence, EvidenceItem{
 			Type:    EvidenceCentrality,
-			Summary: fmt.Sprintf("New dep on %s (in-degree %d in base)", edge.To, targetInDegree),
-			To:      edge.To,
+			Summary: summary,
+			To:      dest,
 			Value:   float64(targetInDegree),
 		})
+	}
+
+	if m.MaxContribution > 0 && contribution > m.MaxContribution {
+		contribution = m.MaxContribution
 	}
 
 	result.Contribution = contribution
