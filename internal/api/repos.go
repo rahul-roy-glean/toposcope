@@ -135,7 +135,23 @@ type historyEntry struct {
 	CommitSHA  string             `json:"commit_sha"`
 	TotalScore float64            `json:"total_score"`
 	Grade      string             `json:"grade"`
+	Count      int                `json:"count"`
 	Metrics    map[string]float64 `json:"metrics"`
+}
+
+func gradeForScore(score float64) string {
+	switch {
+	case score < 5:
+		return "A"
+	case score < 15:
+		return "B"
+	case score < 30:
+		return "C"
+	case score < 50:
+		return "D"
+	default:
+		return "F"
+	}
 }
 
 func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -148,41 +164,74 @@ func (h *Handler) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var history []historyEntry
+	// Aggregate by date: for each day, compute max score and sum metrics.
+	type dayAgg struct {
+		date      string
+		commitSHA string // commit with the highest score
+		maxScore  float64
+		count     int
+		metrics   map[string]float64
+	}
+
+	dayMap := make(map[string]*dayAgg)
+	var dayOrder []string
+
 	for _, sc := range scores {
 		date := sc.CreatedAt.Format("2006-01-02")
 
-		// Parse breakdown to extract metric contributions
+		agg, exists := dayMap[date]
+		if !exists {
+			agg = &dayAgg{
+				date:    date,
+				metrics: make(map[string]float64),
+			}
+			dayMap[date] = agg
+			dayOrder = append(dayOrder, date)
+		}
+		agg.count++
+
+		// Track the commit with the highest score for this day
+		if sc.TotalScore > agg.maxScore {
+			agg.maxScore = sc.TotalScore
+			agg.commitSHA = sc.CommitSHA
+		}
+
+		// Parse breakdown and accumulate max metric values per day
 		var breakdown []struct {
 			Key          string  `json:"key"`
 			Contribution float64 `json:"contribution"`
 		}
 		_ = json.Unmarshal(sc.Breakdown, &breakdown)
 
-		metrics := make(map[string]float64)
 		for _, b := range breakdown {
 			if uiKey, ok := metricKeyMap[b.Key]; ok {
-				metrics[uiKey] = b.Contribution
+				abs := b.Contribution
+				if abs < 0 {
+					abs = -abs
+				}
+				if abs > agg.metrics[uiKey] {
+					agg.metrics[uiKey] = abs
+				}
 			}
 		}
+	}
 
+	// Sort by date ascending (oldest first for charts)
+	sort.Strings(dayOrder)
+
+	history := make([]historyEntry, 0, len(dayOrder))
+	for _, date := range dayOrder {
+		agg := dayMap[date]
 		history = append(history, historyEntry{
-			Date:       date,
-			CommitSHA:  sc.CommitSHA,
-			TotalScore: sc.TotalScore,
-			Grade:      sc.Grade,
-			Metrics:    metrics,
+			Date:       agg.date,
+			CommitSHA:  agg.commitSHA,
+			TotalScore: agg.maxScore,
+			Grade:      gradeForScore(agg.maxScore),
+			Count:      agg.count,
+			Metrics:    agg.metrics,
 		})
 	}
 
-	// Sort by date descending (newest first)
-	sort.Slice(history, func(i, j int) bool {
-		return history[i].Date > history[j].Date
-	})
-
-	if history == nil {
-		history = []historyEntry{}
-	}
 	writeJSON(w, http.StatusOK, history)
 }
 

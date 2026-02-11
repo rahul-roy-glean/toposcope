@@ -102,6 +102,7 @@ export interface ScoreHistory {
   commit_sha: string;
   total_score: number;
   grade: string;
+  count?: number;
   metrics: Record<string, number>;
 }
 

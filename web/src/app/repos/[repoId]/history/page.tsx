@@ -66,22 +66,13 @@ export default function ScoreHistoryPage() {
     load();
   }, [params.repoId]);
 
-  // Check if dates are all the same (needs commit-based X-axis)
-  const allSameDate = useMemo(() => {
-    if (history.length < 2) return false;
-    return history.every((h) => h.date === history[0].date);
-  }, [history]);
-
-  // Prepare chart data with an index and short SHA for X-axis
+  // Chart data is already aggregated by day from the API (oldest first)
   const chartData = useMemo(() => {
-    return history.map((h, i) => ({
+    return history.map((h) => ({
       ...h,
-      index: i,
-      label: allSameDate
-        ? (h.commit_sha ?? "").slice(0, 6)
-        : h.date.slice(5), // MM-DD
+      label: h.date.slice(5), // MM-DD
     }));
-  }, [history, allSameDate]);
+  }, [history]);
 
   // Y-axis domain: cap at 95th percentile to handle outliers
   const scoreYMax = useMemo(() => {
@@ -138,7 +129,7 @@ export default function ScoreHistoryPage() {
 
   // Transform data for the stacked area chart (make contributions absolute)
   const metricData = chartData.map((h) => {
-    const entry: Record<string, number | string> = { label: h.label, index: h.index };
+    const entry: Record<string, number | string> = { label: h.label };
     for (const [key, value] of Object.entries(h.metrics)) {
       entry[key] = Math.abs(value);
     }
@@ -153,7 +144,7 @@ export default function ScoreHistoryPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Score History</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Default branch health scores over time ({history.length} entries)
+          Default branch health — aggregated by day ({history.length} days)
         </p>
       </div>
 
@@ -170,9 +161,6 @@ export default function ScoreHistoryPage() {
                 dataKey="label"
                 tick={{ fontSize: 10, fill: "#a1a1aa" }}
                 interval={tickInterval}
-                angle={allSameDate ? -45 : 0}
-                textAnchor={allSameDate ? "end" : "middle"}
-                height={allSameDate ? 50 : 30}
               />
               <YAxis
                 domain={[0, scoreYMax]}
@@ -188,9 +176,10 @@ export default function ScoreHistoryPage() {
                 }}
                 labelFormatter={(_, payload) => {
                   const item = payload?.[0]?.payload;
-                  return item?.commit_sha
-                    ? `Commit: ${item.commit_sha.slice(0, 8)} (${item.date})`
-                    : item?.date ?? "";
+                  if (!item) return "";
+                  const sha = item.commit_sha ? ` | worst: ${item.commit_sha.slice(0, 8)}` : "";
+                  const count = item.count ? ` | ${item.count} commits` : "";
+                  return `${item.date}${count}${sha}`;
                 }}
                 formatter={(value) => [String(value ?? 0), "Score"]}
               />
@@ -221,9 +210,6 @@ export default function ScoreHistoryPage() {
                 dataKey="label"
                 tick={{ fontSize: 10, fill: "#a1a1aa" }}
                 interval={tickInterval}
-                angle={allSameDate ? -45 : 0}
-                textAnchor={allSameDate ? "end" : "middle"}
-                height={allSameDate ? 50 : 30}
               />
               <YAxis
                 domain={[0, metricYMax]}
@@ -302,9 +288,10 @@ export default function ScoreHistoryPage() {
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800">
                   <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Date</th>
-                  <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Commit</th>
+                  <th className="py-2 pr-4 text-right text-xs font-medium text-zinc-500">Commits</th>
+                  <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Worst Commit</th>
                   <th className="py-2 pr-4 text-left text-xs font-medium text-zinc-500">Grade</th>
-                  <th className="py-2 pr-4 text-right text-xs font-medium text-zinc-500">Score</th>
+                  <th className="py-2 pr-4 text-right text-xs font-medium text-zinc-500">Max Score</th>
                   {Object.keys(METRIC_NAMES).map((key) => (
                     <th
                       key={key}
@@ -323,6 +310,9 @@ export default function ScoreHistoryPage() {
                   >
                     <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">
                       {h.date}
+                    </td>
+                    <td className="py-2 pr-4 text-right text-zinc-500 text-xs">
+                      {h.count ?? 1}
                     </td>
                     <td className="py-2 pr-4">
                       {h.commit_sha ? (
